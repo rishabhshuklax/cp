@@ -2,7 +2,8 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Wires the pieces together and owns the picker's lifecycle.
+/// Owns the running app: the engine pieces, and (as the redesign lands) the
+/// surfaces built on them.
 @Observable
 @MainActor
 public final class AppController {
@@ -10,32 +11,28 @@ public final class AppController {
     public let settings: Settings
     public let store: ClippingStore
     public let archive: ClippingArchive?
-    public let pickerModel: PickerModel
+    public let links: LinkPreviews
 
-    private let monitor: PasteboardMonitor
-    private let paster: Paster
-    private let hotKey = GlobalHotKey()
-    private let linkResolver = LinkResolver()
+    let monitor: PasteboardMonitor
+    let paster: PasteWriting
+    private let pickerHotKey = GlobalHotKey()
 
-    private var panel: PickerPanel?
-    /// The app that was frontmost when the picker opened — the one the paste is
-    /// aimed at. Captured at open time because by the time the user chooses, the
-    /// answer may have changed.
-    private var pasteTarget: NSRunningApplication?
-
-    public private(set) var isPickerVisible = false
     public private(set) var lastError: String?
 
-    public init() {
-        let archive = try? ClippingArchive()
-        let settings = Settings()
+    /// The real app: settings from `UserDefaults`, history from Application
+    /// Support, the system pasteboard.
+    public convenience init() {
+        self.init(settings: Settings(), archive: try? ClippingArchive(), pasteboard: .general)
+    }
 
-        self.archive = archive
+    public init(settings: Settings, archive: ClippingArchive?, pasteboard: NSPasteboard) {
         self.settings = settings
-        self.store = ClippingStore(archive: archive, settings: settings)
-        self.paster = Paster()
-        self.monitor = PasteboardMonitor(settings: settings, archive: archive)
-        self.pickerModel = PickerModel(store: store, settings: settings, linkResolver: linkResolver)
+        self.archive = archive
+        let store = ClippingStore(archive: archive, settings: settings)
+        self.store = store
+        self.links = LinkPreviews(store: store, settings: settings)
+        self.paster = Paster(pasteboard: pasteboard)
+        self.monitor = PasteboardMonitor(pasteboard: pasteboard, settings: settings, archive: archive)
 
         monitor.onCapture = { [weak self] clipping, secret in
             self?.store.ingest(clipping, secret: secret)
@@ -43,113 +40,34 @@ public final class AppController {
     }
 
     public func start() {
-        // Accessory: no Dock icon, no menu bar of its own. This is a utility that
+        // Accessory: no Dock icon, no menu of its own. This is a utility that
         // lives behind a keystroke.
         NSApp.setActivationPolicy(.accessory)
         monitor.start()
-
-        let registered = hotKey.register(settings.hotKey) { [weak self] in
-            self?.togglePicker()
-        }
-        if !registered {
-            lastError = "Couldn't register \(settings.hotKey.displayString) — another app may already own it."
-        }
+        registerHotKey()
     }
 
     public func stop() {
         monitor.stop()
-        hotKey.unregister()
+        pickerHotKey.unregister()
     }
 
-    // MARK: - Picker lifecycle
+    // MARK: - Hot key
 
-    public func togglePicker() {
-        isPickerVisible ? hidePicker() : showPicker()
-    }
-
-    public func showPicker() {
-        pasteTarget = NSWorkspace.shared.frontmostApplication
-        pickerModel.prepare(targetBundleID: pasteTarget?.bundleIdentifier)
-
-        let panel = existingOrNewPanel()
-        panel.positionOnActiveScreen()
-        panel.makeKeyAndOrderFront(nil)
-        isPickerVisible = true
-        pickerModel.resolveLinkIfNeeded()
-    }
-
-    public func hidePicker() {
-        panel?.orderOut(nil)
-        isPickerVisible = false
-    }
-
-    private func existingOrNewPanel() -> PickerPanel {
-        if let panel { return panel }
-
-        let rect = NSRect(
-            x: 0, y: 0,
-            width: Theme.Metric.panelWidth,
-            height: Theme.Metric.panelHeight
-        )
-        let panel = PickerPanel(contentRect: rect)
-
-        let view = PickerView(
-            model: pickerModel,
-            archive: archive,
-            onChoose: { [weak self] clipping, plainText in
-                self?.choose(clipping, asPlainText: plainText)
-            },
-            onTransform: { [weak self] clipping, format in
-                self?.paste(clipping, as: format)
-            },
-            onTogglePin: { [weak self] id in
-                self?.store.togglePin(id)
-                self?.pickerModel.refresh()
-            },
-            onDelete: { [weak self] id in
-                self?.store.delete(id)
-                self?.pickerModel.refresh()
-            },
-            onDismiss: { [weak self] in
-                self?.hidePicker()
-            }
-        )
-
-        let hosting = NSHostingView(rootView: view)
-        hosting.frame = rect
-        panel.contentView = hosting
-        self.panel = panel
-        return panel
-    }
-
-    // MARK: - Choosing
-
-    public func choose(_ clipping: Clipping, asPlainText: Bool) {
-        let format = asPlainText ? PasteFormat.plainText : PasteFormats.defaultFormat(for: clipping, settings: settings)
-        paste(clipping, as: format)
-    }
-
-    public func paste(_ clipping: Clipping, as format: PasteFormat) {
-        guard let payload = PasteRenderer.payload(for: clipping, as: format, store: store)
-                ?? PasteRenderer.payload(for: clipping, as: .original, store: store) else {
-            lastError = clipping.isConcealed ? "That password has been forgotten." : "Nothing to paste."
-            hidePicker()
-            return
+    func registerHotKey() {
+        let registered = pickerHotKey.register(settings.hotKey) { [weak self] in
+            self?.hotKeyPressed()
         }
-        monitor.ignore(changeCount: paster.write(payload))
-        hidePicker()
-        paster.paste(into: pasteTarget, automatic: settings.pasteAutomatically) { [weak self] outcome in
-            if outcome == .copiedOnly(.notAllowed) {
-                self?.lastError = "Copied. Grant Accessibility access to paste automatically."
-            }
-        }
+        lastError = registered ? nil : "Taken by another app"
     }
+
+    private func hotKeyPressed() {}
 
     // MARK: - Permissions
 
-    public var hasAccessibilityPermission: Bool { paster.canPaste }
+    public var canPaste: Bool { paster.canPaste }
 
-    public func requestAccessibilityPermission() {
+    public func requestPastePermission() {
         paster.requestPermission()
     }
 
@@ -159,10 +77,8 @@ public final class AppController {
 extension AppController {
     /// Single shared instance.
     ///
-    /// The app delegate has to start the capture pipeline at launch, and the
-    /// SwiftUI scene tree has to read the same store — without one owner they end
-    /// up as two `AppController`s, each polling the pasteboard, each with half the
-    /// history. A menu-bar utility has exactly one of these by construction, so a
-    /// shared instance is the honest way to say so.
+    /// The app delegate starts the capture pipeline at launch and the scene tree
+    /// reads the same store — without one owner they end up as two controllers,
+    /// each polling the pasteboard, each with half the history.
     public static let shared = AppController()
 }
