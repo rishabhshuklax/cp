@@ -27,6 +27,7 @@ mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 
 cp "${BINARY}" "${APP}/Contents/MacOS/cp"
 cp "${ROOT}/Resources/Info.plist" "${APP}/Contents/Info.plist"
+cp "${ROOT}/Resources/AppIcon.icns" "${APP}/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signature, with the designated requirement pinned to the bundle id.
 #

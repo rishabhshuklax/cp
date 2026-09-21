@@ -24,6 +24,22 @@ run: app ## Build and launch cp.app
 	@pkill -f "build/cp.app/Contents/MacOS/cp" || true
 	open build/cp.app
 
+.PHONY: install
+install: app ## Copy cp.app to /Applications and launch it
+	@pkill -f "cp.app/Contents/MacOS/cp" || true
+	rm -rf /Applications/cp.app
+	cp -R build/cp.app /Applications/cp.app
+	open /Applications/cp.app
+
+.PHONY: uninstall
+uninstall: ## Quit cp and remove it from /Applications (your history is kept)
+	@pkill -f "cp.app/Contents/MacOS/cp" || true
+	rm -rf /Applications/cp.app
+
+.PHONY: icon
+icon: ## Redraw Resources/AppIcon.icns from Scripts/make-icon.swift
+	swift Scripts/make-icon.swift
+
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf .build build

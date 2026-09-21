@@ -1,49 +1,106 @@
 # cp
 
-A macOS clipboard manager built on one idea: **a clipping is a typed value, not
-a string** — and a second one the redesign added: **you choose by looking at the
-thing, not by reading a grey line about it.**
+A clipboard manager for macOS that shows you the thing you copied, not a grey
+line about it.
 
-[`DESIGN.md`](DESIGN.md) has the rationale, what was thrown away, and why.
+Press `⇧⌘V` and the clip you are about to paste fills the top of the panel,
+drawn as itself: a link with its page title, code with its colours, a colour as
+a swatch, a screenshot as the picture. Hold `⇧⌘` and tap `V` to flick back
+through recent clips the way `⌘Tab` flicks through apps, and let go to paste.
 
-## Status
+- **Quick switch.** Hold the shortcut, tap `V`, release. No window to read.
+- **Choose the format after you paste.** A small chip appears where the paste
+  landed: Link · Title · Markdown, Rich · Plain, HEX · RGB · HSL. Click one and
+  the paste is swapped in place.
+- **Search inside screenshots.** Text in images is read on your Mac (Vision),
+  so `invoice` finds the screenshot of the invoice.
+- **A stack.** `⇧↩` collects clips; each `⌘V` then pastes the next one.
+- **Passwords don't stay.** Copies from password managers are never recorded,
+  and anything marked concealed shows as a countdown and is forgotten. Nothing
+  concealed is ever written to disk.
+- **Search that matches what you typed.** Literal, across titles, bodies, page
+  titles, URLs, file paths, app names and image text. 2 ms a keystroke at 2,000
+  clips.
+- **A Library** (`⌥⌘V`) for browsing: by kind, by the app you copied from, by day.
 
-**Redesigned, built, not yet lived with.** The engine (capture, storage, search,
-paste formats, pasting) and the UI (picker, quick switch, format chip, Library,
-menu bar, Settings) are complete rather than stubbed. 162 tests pass; the
-surfaces were checked off-screen against real windows.
+Everything stays on your Mac. There is no account, no sync and no network
+access unless you turn on page titles for links.
 
-Requires macOS 14 or later; the Liquid Glass chrome is macOS 26 and falls back
-to a material with a hairline edge before that.
+[`DESIGN.md`](DESIGN.md) explains why it works the way it does.
 
-## Build
+## Build and run on your Mac
+
+You need **macOS 14 or later** to run it and **Xcode 26 or later** to build it
+(the Liquid Glass code needs the macOS 26 SDK; on macOS 14 and 15 the app falls
+back to standard materials). There are no other dependencies.
 
 ```bash
-make app     # build and assemble build/cp.app
-make run     # build, assemble, and launch
-make test    # run the test suite
+git clone https://github.com/rishabhshuklax/cp.git
+cd cp
+make install
 ```
 
-The bundle matters: `LSUIElement` only applies inside one, and the Accessibility
-grant is remembered per app. `bundle.sh` signs ad-hoc with the designated
-requirement pinned to the bundle identifier, so the grant survives a rebuild —
-the default ad-hoc requirement is a content hash and changes every time.
+`make install` builds a release binary, assembles `cp.app`, copies it to
+`/Applications` and launches it. cp has no Dock icon: look for the clipboard in
+the menu bar, or just press `⇧⌘V`.
 
-## Using it
+Other targets:
 
-`⇧⌘V` opens the picker, centred above the middle of the screen. The clipping you
-are about to paste fills the top of it, rendered as itself. Hold `⇧⌘` and tap
-`V` again to get the switcher instead: a row of recent clips, released to paste.
+```bash
+make run        # build and launch from build/cp.app, without installing
+make app        # only build build/cp.app
+make test       # run the tests (162 of them)
+make uninstall  # quit cp and remove it from /Applications
+make help       # list everything
+```
+
+### First run
+
+1. Press `⇧⌘V`. The picker opens over whatever app you are in.
+2. Click **Allow pasting…** and switch cp on under **Privacy & Security →
+   Accessibility**. cp needs this for exactly one thing: pressing `⌘V` for you
+   in the app you were using. Until you allow it, choosing a clip copies it and
+   you press `⌘V` yourself.
+3. On macOS 15.4 and later the system may also ask whether cp can read the
+   clipboard. Allow it; Settings shows where that stands.
+
+You grant these once. The build signs the app with a stable identity, so the
+permission survives rebuilding.
+
+To start cp when you log in, add it under **System Settings → General → Login
+Items**.
+
+### If something is off
+
+- **No menu bar icon.** The menu bar is full and macOS has hidden it behind the
+  notch. `⌘`-drag another icon out to make room. Every shortcut works without it.
+- **`⇧⌘V` does nothing.** Another app owns the shortcut. Open the menu bar
+  item → Settings and record a different one.
+- **It copies but does not paste.** Accessibility is not granted, or was
+  granted to an older copy. Remove cp from the Accessibility list, add it
+  again, and relaunch.
+- **`⇧⌘V` used to mean "paste and match style" in my editor.** cp takes the
+  shortcut system-wide. Pick another in Settings, or use `⌥↩` in the picker to
+  paste as plain text.
+
+### Your data
+
+History lives in `~/Library/Application Support/cp/` as a plain JSONL log plus
+an `assets` folder of images. Delete that folder to erase everything; **Settings
+→ Privacy → Clear history…** does the same without touching pinned clips.
+
+## Keys
 
 | Key | Does |
 | --- | --- |
+| `⇧⌘V` | Open the picker; hold `⇧⌘` and tap `V` again for quick switch |
 | `↑` `↓` | Move the selection; the preview follows |
 | `↩` | Paste |
 | `⌥↩` | Paste as plain text |
 | `⇧↩` | Add to, or take out of, the stack |
 | `⌘↩` | Paste the stack in order |
-| `⌘1`–`⌘9` | Paste that row (hold ⌘ to see the numbers) |
-| `Space` or `⌘Y` | Look: the clipping fills the panel |
+| `⌘1`–`⌘9` | Paste that row (hold `⌘` to see the numbers) |
+| `Space` or `⌘Y` | Look: the clip fills the panel |
 | `⌘K` | Paste as… |
 | `⌘P` | Pin (pinned clips are never trimmed) |
 | `⌘⌫` | Delete; `⌘Z` puts it back |
@@ -53,26 +110,26 @@ are about to paste fills the top of it, rendered as itself. Hold `⇧⌘` and ta
 | `⌘,` | Settings |
 | `⌥⌘V` | Library |
 
-Search matches what you typed, literally, in the title, the page title, the
-body, the text found inside images, the URL, the file path and the app name.
-Words that could be filters — `links`, `yesterday`, `figma` — are *offered* as a
-chip on `⇥`, never applied behind your back.
+Words that could be filters — `links`, `yesterday`, `figma` — are *offered* as
+a chip on `⇥`. They are never applied behind your back.
 
-**The stack.** `⇧↩` adds clips to it. Paste them in order with `⌘↩`, or close the
-picker and each `⌘V` pastes the next one until it runs out.
+## Privacy
 
-**After a paste**, a small capsule appears where the text landed with the other
-formats that clipping could have taken — Markdown, the clean link, the text
-inside the screenshot. Clicking one swaps the paste in place.
+A clipboard manager sees everything you copy, so this is the part to be
+suspicious of.
 
-## Permissions
+1. Copies made in password managers (1Password, Bitwarden, KeePassXC, Keychain
+   Access and others; the list is editable) never reach the history.
+2. The [nspasteboard.org](https://nspasteboard.org) conventions are honoured:
+   concealed items are treated as secrets, transient and auto-generated items
+   are not recorded at all.
+3. Credential-shaped text (`ghp_…`, `sk-…`, `AKIA…`, JWTs, PEM blocks) is
+   treated as a secret too.
+4. A secret shows up as a countdown — "Forgets in 42s · not saved" — so the
+   rule is something you can watch working. It lives in memory for as long as
+   Settings says (or not at all) and is never written to disk.
 
-- **Accessibility** — only to press `⌘V` for you. Without it, choosing still
-  copies, the button says **Copy**, and the toast tells you to press `⌘V`.
-- **Reading the clipboard** — macOS 15.4 and later asks once; Settings shows
-  where it stands.
-- **No network by default.** Page titles are opt-in, fetched only for the link
-  you have selected, and only from the site itself.
+No analytics, no crash reporting, no update checks.
 
 ## Where things are
 
@@ -96,38 +153,39 @@ Sources/CpKit/
     Theme, Glass, KeyPanel
   App/        AppController, GlobalHotKey (Carbon), PasteStack
 Sources/cp/   CpApp — the MenuBarExtra scene and the app delegate
+Scripts/      bundle.sh (assembles and signs cp.app), make-icon.swift (draws the icon)
 ```
 
-Four load-bearing details, spelled out where they live so they are not
-rediscovered the hard way:
+Four details that fail silently if you get them wrong, each documented where it
+lives:
 
-- **`KeyPanel`** — `.nonactivatingPanel` **and** `canBecomeKey` overridden, or it
-  fails silently and differently. `sendEvent` routes every key to the model
-  before the search field can swallow it.
-- **`PasteboardMonitor`** — polling is the only option; macOS has no
-  pasteboard-changed notification and never has.
-- **`GlobalHotKey`** — Carbon's `RegisterEventHotKey` is still the right call.
-  `NSEvent` monitors can see a keystroke but not consume it, and a `CGEventTap`
-  would demand Accessibility before first launch.
-- **`Scripts/bundle.sh`** — the designated requirement is why the Accessibility
-  grant survives rebuilds.
-
-## Privacy
-
-Clipboard managers persist whatever you copy, passwords included. Three layers,
-and the third is the point:
-
-1. Copies from known password managers never reach the history.
-2. The `org.nspasteboard.ConcealedType` convention is honoured; transient and
-   auto-generated items are ignored entirely.
-3. A concealed clipping shows up as a **countdown** — "Forgets in 42s · not
-   saved" — so the rule is something you can watch working.
-
-Concealed clippings live in memory for as long as Settings says, and are never
-written to disk.
+- **`KeyPanel`** needs both `.nonactivatingPanel` and `canBecomeKey`. Without
+  the first the app you are pasting into loses focus; without the second the
+  arrow keys do nothing. Its `sendEvent` hands every key to the model before
+  the search field can swallow it.
+- **`PasteboardMonitor`** polls. macOS has no pasteboard-changed notification
+  and never has.
+- **`GlobalHotKey`** uses Carbon's `RegisterEventHotKey`. `NSEvent` monitors can
+  see a keystroke but not consume it, and a `CGEventTap` would demand
+  Accessibility before first launch.
+- **`Scripts/bundle.sh`** pins the ad-hoc signature's designated requirement to
+  the bundle identifier. The default is a content hash, which changes on every
+  build and silently drops the Accessibility grant.
 
 ## Not done yet
 
-- iCloud or any other sync.
-- Sharing the history between machines, or exporting it.
-- Editing a clipping before pasting it.
+- Open at login from inside the app (use Login Items for now).
+- A signed, notarised download. For now you build it yourself.
+- iCloud or any other sync, and exporting the history.
+- Editing a clip before pasting it.
+
+## Contributing
+
+Issues and pull requests are welcome. `make test` should pass, new behaviour
+should come with a test, and comments should say *why* rather than *what* — the
+existing code is the style guide. UI changes are easier to review with a
+screenshot.
+
+## Licence
+
+[MIT](LICENSE).
