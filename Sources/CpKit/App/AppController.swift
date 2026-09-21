@@ -26,6 +26,7 @@ public final class AppController: PickerHost, LibraryHost {
     private var picker: PickerWindow!
     private var toastWindow: ToastWindow!
     private var library: LibraryWindow!
+    private var settingsWindow: SettingsWindow!
     private let chip = FormatChipWindow()
     public private(set) var switcher: QuickSwitch!
     private var switcherWindow: SwitcherWindow!
@@ -69,6 +70,7 @@ public final class AppController: PickerHost, LibraryHost {
 
         picker = PickerWindow(model: pickerModel)
         library = LibraryWindow(model: libraryModel)
+        settingsWindow = SettingsWindow(controller: self)
         toastWindow = ToastWindow(center: toasts)
         picker.onHide = { [weak self] in
             // Clips left in the stack take over ⌘V once the picker is gone.
@@ -274,8 +276,44 @@ public final class AppController: PickerHost, LibraryHost {
     }
 
     public func openSettings() {
-        // Settings is its own window; it lands with the rest of the chrome.
+        hidePicker()
+        chip.hide()
+        settingsWindow.show()
     }
+
+    /// Everything kept, and what it takes up on disk. Measured off the main
+    /// thread: the assets folder can hold a few hundred screenshots.
+    public func historySummary() async -> String {
+        let clips = store.clippings.filter { !$0.isConcealed }.count
+        let count = clips == 1 ? "1 clip" : "\(Self.decimal.string(from: NSNumber(value: clips)) ?? "\(clips)") clips"
+        guard let directory = archive?.assetsDirectory.deletingLastPathComponent() else { return count }
+        let bytes = await Task.detached(priority: .utility) { Self.directorySize(directory) }.value
+        return "\(count) · \(ByteFormat.short(bytes))"
+    }
+
+    nonisolated private static func directorySize(_ directory: URL) -> Int {
+        let keys: [URLResourceKey] = [.fileSizeKey, .isRegularFileKey]
+        guard let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: keys) else { return 0 }
+        var total = 0
+        for case let url as URL in files {
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            guard values?.isRegularFile == true else { continue }
+            total += values?.fileSize ?? 0
+        }
+        return total
+    }
+
+    public func clearHistory() {
+        store.clearUnpinned()
+        stack.clear()
+        toasts.show("History cleared")
+    }
+
+    private static let decimal: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
 
     // MARK: - Capture state, for the menu bar
 
