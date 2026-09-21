@@ -12,7 +12,7 @@ import SwiftUI
 @MainActor
 public final class PickerModel {
 
-    public private(set) var results: [ScoredClipping] = []
+    public private(set) var results: [ClipHit] = []
     public var selectedID: UUID?
 
     /// Computed over tracked storage rather than stored with a `didSet`: the
@@ -28,7 +28,7 @@ public final class PickerModel {
         }
     }
 
-    public var committedFilters: [SearchQuery.Filter] {
+    public var committedFilters: [ClipFilter] {
         get { storedFilters }
         set {
             guard newValue != storedFilters else { return }
@@ -38,7 +38,7 @@ public final class PickerModel {
     }
 
     private var storedSearchText: String = ""
-    private var storedFilters: [SearchQuery.Filter] = []
+    private var storedFilters: [ClipFilter] = []
 
     /// Resolved link titles, keyed by clipping id. Populated lazily as rows are
     /// selected, never at capture time.
@@ -48,7 +48,6 @@ public final class PickerModel {
     private let store: ClippingStore
     private let settings: Settings
     private let linkResolver: LinkResolver
-    private var ranker = Ranker()
     private var resolveTask: Task<Void, Never>?
 
     public init(store: ClippingStore, settings: Settings, linkResolver: LinkResolver) {
@@ -76,7 +75,6 @@ public final class PickerModel {
     /// Called each time the panel opens. Captures the app being pasted *into*, which
     /// is what drives the affinity nudge in the ranker.
     public func prepare(targetBundleID: String?) {
-        ranker = Ranker(targetBundleID: targetBundleID, now: Date())
         // Reset through the backing storage so this is one re-rank, not three.
         storedSearchText = ""
         storedFilters = []
@@ -85,11 +83,7 @@ public final class PickerModel {
     }
 
     public func refresh() {
-        let query = SearchQuery(
-            filters: committedFilters,
-            text: searchText.trimmingCharacters(in: .whitespaces)
-        )
-        results = ranker.rank(store.clippings, query: query)
+        results = store.search(ClipQuery(text: searchText, filters: committedFilters))
 
         // Keep the selection if it survived the filter; otherwise fall to the top.
         if let selectedID, results.contains(where: { $0.id == selectedID }) { return }
@@ -154,7 +148,7 @@ public final class PickerModel {
     }
 
     public func title(for clipping: Clipping) -> String? {
-        resolvedTitles[clipping.id]
+        resolvedTitles[clipping.id] ?? clipping.linkTitle
     }
 
     public func favicon(for clipping: Clipping) -> NSImage? {
@@ -166,12 +160,12 @@ public final class PickerModel {
     /// Groups the ranked results into time buckets for the section headers.
     /// Only applied to an unfiltered list: once you are searching, relevance order
     /// is the point and chopping it into date sections just hides the best match.
-    public func sections() -> [(bucket: TimeBucket, items: [ScoredClipping])] {
+    public func sections() -> [(bucket: TimeBucket, items: [ClipHit])] {
         let isSearching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
         guard !isSearching else { return [(bucket: .now, items: results)] }
 
         let now = Date()
-        var grouped: [TimeBucket: [ScoredClipping]] = [:]
+        var grouped: [TimeBucket: [ClipHit]] = [:]
         for scored in results {
             let bucket = TimeBucket.bucket(for: scored.clipping, now: now)
             grouped[bucket, default: []].append(scored)

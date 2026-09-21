@@ -156,7 +156,7 @@ public struct PickerView: View {
     /// Computed once per render rather than per section: `sections()` walks the
     /// whole result set, and calling it inside the `ForEach` ran it again for every
     /// header.
-    private var sections: [(bucket: TimeBucket, items: [ScoredClipping])] {
+    private var sections: [(bucket: TimeBucket, items: [ClipHit])] {
         model.sections()
     }
 
@@ -270,7 +270,7 @@ public struct PickerView: View {
 
     /// ⌥1–9 map to the first nine rows of the *ranked* list, not of each section,
     /// so the badge on a row always matches the key that reaches it.
-    private func shortcutIndex(for scored: ScoredClipping) -> Int? {
+    private func shortcutIndex(for scored: ClipHit) -> Int? {
         guard let index = model.results.firstIndex(where: { $0.id == scored.id }), index < 9 else { return nil }
         return index + 1
     }

@@ -18,7 +18,7 @@ import SwiftUI
 ///   whitespace distinguishes nothing.
 public struct ClippingRow: View {
 
-    private let scored: ScoredClipping
+    private let scored: ClipHit
     private let isSelected: Bool
     private let shortcutIndex: Int?
     private let archive: ClippingArchive?
@@ -28,7 +28,7 @@ public struct ClippingRow: View {
     private var clipping: Clipping { scored.clipping }
 
     public init(
-        scored: ScoredClipping,
+        scored: ClipHit,
         isSelected: Bool,
         shortcutIndex: Int? = nil,
         archive: ClippingArchive? = nil,
@@ -187,7 +187,7 @@ public struct ClippingRow: View {
             case .url:
                 HighlightedText(
                     resolvedTitle ?? clipping.titleLine,
-                    highlights: resolvedTitle == nil ? scored.highlights : [],
+                    highlights: [],
                     font: Theme.Font.rowBody
                 )
                 .foregroundStyle(.primary)
@@ -212,7 +212,7 @@ public struct ClippingRow: View {
             case .text, .richText:
                 HighlightedText(
                     textPreview,
-                    highlights: scored.highlights,
+                    highlights: [],
                     font: Theme.Font.rowBody
                 )
                 .foregroundStyle(.primary)

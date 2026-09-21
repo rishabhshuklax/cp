@@ -52,10 +52,10 @@ public struct BrowserView: View {
             }
         }
 
-        var filter: SearchQuery.Filter? {
+        var filter: ClipFilter? {
             switch self {
             case .all: return nil
-            case .pinned: return .pinnedOnly
+            case .pinned: return .pinned
             case .kind(let kind): return .kind(kind)
             }
         }

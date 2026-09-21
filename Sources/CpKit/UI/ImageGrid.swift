@@ -5,14 +5,14 @@ import SwiftUI
 /// that text doesn't — you can recognise one without reading it.
 public struct ImageGrid: View {
 
-    private let results: [ScoredClipping]
+    private let results: [ClipHit]
     private let selectedID: UUID?
     private let archive: ClippingArchive?
     private let onSelect: (UUID) -> Void
     private let onChoose: (UUID) -> Void
 
     public init(
-        results: [ScoredClipping],
+        results: [ClipHit],
         selectedID: UUID?,
         archive: ClippingArchive?,
         onSelect: @escaping (UUID) -> Void,
@@ -49,7 +49,7 @@ public struct ImageGrid: View {
         }
     }
 
-    private func cell(for scored: ScoredClipping) -> some View {
+    private func cell(for scored: ClipHit) -> some View {
         let clipping = scored.clipping
         let isSelected = clipping.id == selectedID
 

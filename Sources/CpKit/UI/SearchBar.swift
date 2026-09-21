@@ -9,13 +9,13 @@ import SwiftUI
 public struct SearchBar: View {
 
     @Binding private var text: String
-    @Binding private var committedFilters: [SearchQuery.Filter]
+    @Binding private var committedFilters: [ClipFilter]
     private let resultCount: Int
     @FocusState private var isFocused: Bool
 
     public init(
         text: Binding<String>,
-        committedFilters: Binding<[SearchQuery.Filter]>,
+        committedFilters: Binding<[ClipFilter]>,
         resultCount: Int
     ) {
         self._text = text
@@ -44,9 +44,6 @@ public struct SearchBar: View {
                     committedFilters.removeLast()
                     return .handled
                 }
-                .onChange(of: text) { _, newValue in
-                    commitCompletedTokens(in: newValue)
-                }
 
             if resultCount > 0 {
                 Text("\(resultCount)")
@@ -60,11 +57,11 @@ public struct SearchBar: View {
         .onAppear { isFocused = true }
     }
 
-    private func chip(_ filter: SearchQuery.Filter, at index: Int) -> some View {
+    private func chip(_ filter: ClipFilter, at index: Int) -> some View {
         HStack(spacing: 3) {
             Image(systemName: filter.symbolName)
                 .font(.system(size: 9))
-            Text(filter.chipLabel)
+            Text(filter.label)
                 .font(Theme.Font.badge)
             Button {
                 committedFilters.remove(at: index)
@@ -80,20 +77,5 @@ public struct SearchBar: View {
         .background(Theme.selectedSurface, in: Capsule())
         .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: 1) }
         .transition(.scale(scale: 0.8).combined(with: .opacity))
-    }
-
-    /// A token becomes a chip once the user types the space that finishes it.
-    private func commitCompletedTokens(in value: String) {
-        guard value.hasSuffix(" ") else { return }
-
-        let parsed = SearchQuery.parse(value)
-        guard !parsed.filters.isEmpty else { return }
-
-        withAnimation(Theme.Motion.chrome) {
-            for filter in parsed.filters where !committedFilters.contains(filter) {
-                committedFilters.append(filter)
-            }
-            text = parsed.text.isEmpty ? "" : parsed.text + " "
-        }
     }
 }
