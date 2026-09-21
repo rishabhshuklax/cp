@@ -21,19 +21,19 @@ app: ## Assemble build/cp.app
 run: app ## Build and launch cp.app
 	@# Only ever this bundle's own process: `pkill -x cp` would also kill
 	@# whatever /bin/cp happens to be copying a file at the time.
-	@pkill -f "build/cp.app/Contents/MacOS/cp" || true
+	@./Scripts/quit.sh "build/cp.app/Contents/MacOS/cp"
 	open build/cp.app
 
 .PHONY: install
 install: app ## Copy cp.app to /Applications and launch it
-	@pkill -f "cp.app/Contents/MacOS/cp" || true
+	@./Scripts/quit.sh "cp.app/Contents/MacOS/cp"
 	rm -rf /Applications/cp.app
 	cp -R build/cp.app /Applications/cp.app
 	open /Applications/cp.app
 
 .PHONY: uninstall
 uninstall: ## Quit cp and remove it from /Applications (your history is kept)
-	@pkill -f "cp.app/Contents/MacOS/cp" || true
+	@./Scripts/quit.sh "cp.app/Contents/MacOS/cp"
 	rm -rf /Applications/cp.app
 
 .PHONY: icon
