@@ -17,7 +17,7 @@ final class ArchiveTests: XCTestCase {
 
     private var logURL: URL { directory.appendingPathComponent("history.jsonl") }
 
-    /// Lines exactly as 535ad29 wrote them: whole-second dates, escaped slashes,
+    /// Lines exactly as version 0.1 wrote them: whole-second dates, escaped slashes,
     /// none of the redesign's fields.
     private let legacyLines = [
         #"{"upsert":{"_0":{"lastCopiedAt":"2026-09-21T12:07:07Z","copyCount":1,"sourceAppName":"System Settings","byteCount":36,"kind":"text","id":"26447945-C1CB-442F-9302-46EEFBAFBF5A","createdAt":"2026-09-21T12:07:07Z","payload":"hello world, plain prose from a chat","isPinned":true,"isConcealed":false,"sourceBundleID":"com.apple.systempreferences"}}}"#,
@@ -59,7 +59,7 @@ final class ArchiveTests: XCTestCase {
         ], "newest first")
     }
 
-    /// Fix 7: two copies in the same second used to swap places after a relaunch.
+    /// Two copies in the same second used to swap places after a relaunch.
     func testDatesKeepFractionalSecondsAndOrder() throws {
         let archive = try ClippingArchive(directory: directory)
         let base = Date(timeIntervalSinceReferenceDate: 800_000_000.1)
@@ -79,7 +79,7 @@ final class ArchiveTests: XCTestCase {
         XCTAssertEqual(loaded[1].createdAt.timeIntervalSince(first.createdAt), 0, accuracy: 0.000_002)
     }
 
-    /// Fix 6: a crash mid-write leaves a line with no newline. The next record
+    /// A crash mid-write leaves a line with no newline. The next record
     /// used to be glued onto it and lost with it.
     func testTornLastLineCostsOnlyItself() throws {
         let archive = try ClippingArchive(directory: directory)

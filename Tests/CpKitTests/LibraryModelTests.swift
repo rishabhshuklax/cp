@@ -80,8 +80,8 @@ final class LibraryModelTests: XCTestCase {
     }
 
     func testGroupsAreDaysInOrder() {
-        add("today", age: 60)
-        add("yesterday", age: 26 * 3_600)
+        add("today", age: Ago.today)
+        add("yesterday", age: Ago.yesterday)
         add("last week", age: 6 * 86_400)
         XCTAssertEqual(model.groups.map(\.day.rawValue), ["Today", "Yesterday", "Earlier"])
         XCTAssertEqual(model.groups.map(\.clippings.count), [1, 1, 1])

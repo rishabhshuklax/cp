@@ -23,11 +23,11 @@ final class ClassifierTests: XCTestCase {
         XCTAssertNotEqual(kind("#hello!"), .color)
     }
 
-    /// Fix 12: `#123` and `#1234` are issue and pull-request references.
+    /// `#123` and `#1234` are issue and pull-request references.
     func testIssueReferencesAreNotColors() {
         XCTAssertEqual(kind("#123"), .text)
         XCTAssertEqual(kind("#4521"), .text)
-        // Corpus samples.
+        // Seen in real histories.
         for ref in ["#382", "#9068", "#8260"] { XCTAssertEqual(kind(ref), .text, ref) }
         // Six all-digit hex digits are still a colour: #123456 is a dark blue.
         XCTAssertEqual(kind("#123456"), .color)
@@ -70,10 +70,10 @@ final class ClassifierTests: XCTestCase {
         XCTAssertNotEqual(kind("/"), .file)
     }
 
-    /// Fix 12: anything starting with "/" used to become a file.
+    /// Anything starting with "/" used to become a file.
     func testSlashLedTextIsNotAFile() {
         XCTAssertNotEqual(kind("/api/v1/users"), .file)
-        XCTAssertNotEqual(kind("/api/v1/catechist/8866"), .file)   // corpus sample
+        XCTAssertNotEqual(kind("/api/v1/catechist/8866"), .file)
         XCTAssertNotEqual(kind("// TODO: remove this hack"), .file)
         XCTAssertNotEqual(kind("/giphy thumbs up"), .file)
         XCTAssertNotEqual(kind("/^\\d{3}-\\d{4}$/"), .file)
@@ -96,7 +96,7 @@ final class ClassifierTests: XCTestCase {
         XCTAssertNotEqual(kind("[1, 2,]"), .json)
     }
 
-    /// Fix 12: JSON bigger than the 8 KB scan window used to be typed as text.
+    /// JSON bigger than the 8 KB scan window used to be typed as text.
     func testJSONOverTheScanWindow() {
         let items = (0..<400).map { "{\"id\":\($0),\"name\":\"user\($0)\",\"active\":true}" }
         let big = "[" + items.joined(separator: ",") + "]"
@@ -119,12 +119,12 @@ final class ClassifierTests: XCTestCase {
         XCTAssertEqual(language("#!/usr/bin/env bash\necho hello"), "shell")
     }
 
-    /// Fix 12: 68 of 100 Python snippets in the audit corpus were typed as text.
+    /// Python has no braces or semicolons to go on, and most of it used to be typed as text.
     func testPython() {
         XCTAssertEqual(language("def total(items):\n    return sum(i.price for i in items)\n\nprint(total(cart))"), "python")
         XCTAssertEqual(language("import os\nfrom pathlib import Path\n\nroot = Path(os.getcwd())"), "python")
         XCTAssertEqual(language("class Cache:\n    def __init__(self):\n        self.items = {}"), "python")
-        // Corpus samples: stdlib fragments with no braces or semicolons at all.
+        // Standard-library fragments with no braces or semicolons at all.
         XCTAssertEqual(language("            def default(self, o):\n                try:\n                    iterable = iter(o)\n                except TypeError:\n                    pass"), "python")
         XCTAssertEqual(language("                        else:\n                            line = line.rstrip('\\r\\n')\n                line = self.precmd(line)\n                stop = self.onecmd(line)\n                stop = self.postcmd(stop, line)\n            self.postloop()"), "python")
         XCTAssertEqual(kind("        return self.header_factory(name, value)\n\n    def fold(self, name, value):\n        \"\"\"+\n        Header folding is controlled by the refold_source policy setting.  A"), .code)
@@ -141,7 +141,7 @@ final class ClassifierTests: XCTestCase {
         XCTAssertEqual(language("make test"), "shell")
         XCTAssertEqual(language("curl -sS https://api.example.com/v1/status | jq ."), "shell")
         XCTAssertEqual(language("export API_URL=https://example.internal"), "shell")
-        // Corpus samples: a C header and npm's JavaScript.
+        // A C header and npm's JavaScript.
         XCTAssertEqual(language("\t\t__attribute__((__format__ (__strfmon__, fmtarg, firstvararg)))\n#define __strftimelike(fmtarg) \\\n\t\t__attribute__((__format__ (__strftime__, fmtarg, 0)))\n#else\n#define __strfmonlike(fmtarg, firstvararg)\n#define __strftimelike(fmtarg)"), "c")
         XCTAssertEqual(language("    }\n\n    const dryRun = this.npm.config.get('dry-run')\n    const where = this.npm.prefix\n    const Arborist = require('@npmcli/arborist')"), "javascript")
     }

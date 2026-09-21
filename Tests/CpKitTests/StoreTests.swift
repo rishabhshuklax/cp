@@ -36,15 +36,15 @@ final class StoreTests: XCTestCase {
 
     // MARK: - Concealed
 
-    /// Fix 4: every concealed copy used to collapse into one row.
+    /// Every concealed copy used to collapse into one row.
     func testConcealedCopiesKeepTheirOwnRowsAndSecrets() throws {
         let (store, archive) = try makeStore()
         let first = store.ingest(concealed("1Password"), secret: "hunter2-hunter2")
-        let second = store.ingest(concealed("looks like a credential"), secret: "ghp_abcdefghijklmnopqrstuvwxyz")
+        let second = store.ingest(concealed("looks like a credential"), secret: FakeSecret.github)
         XCTAssertEqual(store.clippings.count, 2)
         XCTAssertEqual(Set(store.clippings.compactMap(\.detail)), ["1Password", "looks like a credential"])
         XCTAssertEqual(store.secret(for: first.id), "hunter2-hunter2")
-        XCTAssertEqual(store.secret(for: second.id), "ghp_abcdefghijklmnopqrstuvwxyz")
+        XCTAssertEqual(store.secret(for: second.id), FakeSecret.github)
         XCTAssertNotNil(first.expiresAt)
         XCTAssertEqual(first.title, "Password")
         XCTAssertEqual(logLines(archive), 0, "never written")
@@ -83,7 +83,7 @@ final class StoreTests: XCTestCase {
 
     // MARK: - Images
 
-    /// Fix 2: two different same-size screenshots collapsed into one row and the
+    /// Two different same-size screenshots collapsed into one row and the
     /// second PNG was left on disk with nothing pointing at it.
     func testImagesDedupeOnTheirBytesAndLeaveNoOrphans() throws {
         let (store, archive) = try makeStore()
@@ -110,7 +110,7 @@ final class StoreTests: XCTestCase {
 
     // MARK: - History limit
 
-    /// Fix 14: once the history was full, every copy rewrote the whole log.
+    /// Once the history was full, every copy rewrote the whole log.
     func testTrimmingAppendsTombstonesAndCompactsRarely() throws {
         settings.historyLimit = 50
         let (store, archive) = try makeStore()

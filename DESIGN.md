@@ -1,8 +1,8 @@
 # Design
 
-Why this exists, and what the redesign changed. The short version: **Maccy shows
-you strings; the first cp showed you rows about clippings; this one shows you
-the clipping.**
+Why this exists, and what the redesign changed. The short version: **most clipboard
+managers show you strings; the first cp showed you rows about clippings; this
+one shows you the clipping.**
 
 ## The diagnosis, twice
 
@@ -46,7 +46,7 @@ mislabelled badge, not correctness.
 ## The selection model
 
 This is the part that made the old picker feel broken, and it is worth naming
-precisely. The audit clicked row 4 and pasted row 12.
+precisely. In testing, a click aimed at row 4 pasted row 12.
 
 - Opening selects the **newest** clip — what `⌘V` would paste anyway — and never
   a pin for being a pin.

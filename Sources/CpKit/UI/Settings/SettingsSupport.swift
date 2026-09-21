@@ -5,8 +5,7 @@ import SwiftUI
 /// Whether macOS lets cp read the clipboard at all (macOS 15.4 and later).
 ///
 /// Read through a closure rather than straight off `NSPasteboard.general`, so
-/// a test or an off-screen harness never has to touch the real clipboard to
-/// draw this row.
+/// a test never has to touch the real clipboard to draw this row.
 public enum ClipboardAccess: Equatable, Sendable {
     case allowed
     case ask

@@ -64,7 +64,7 @@ final class SearchTests: XCTestCase {
 
     // MARK: - Matching
 
-    /// Fix 15: fuzzy subsequence matching returned rows that never contained
+    /// Fuzzy subsequence matching returned rows that never contained
     /// the word ("api" matched 1,208 rows, 84% without "api" in them).
     func testWordsMustAppearLiterally() {
         add("a pretty important note")      // a…p…i, but not "api"
@@ -191,11 +191,9 @@ final class SearchTests: XCTestCase {
     // MARK: - Filters
 
     func testFilters() {
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: now)
-        add("https://github.com/a/b", age: 60)
-        add("#FF5733", app: "Figma", bundle: "com.figma.Desktop", age: 120)
-        add("Image 10×10", kind: .image, age: now.timeIntervalSince(startOfToday) + 3_600)   // yesterday
+        add("https://github.com/a/b", age: Ago.today)
+        add("#FF5733", app: "Figma", bundle: "com.figma.Desktop", age: Ago.today / 2)
+        add("Image 10×10", kind: .image, age: Ago.yesterday)
         add("plain words", age: 3 * 86_400, pinned: true)
         add("styled words", kind: .richText, age: 10 * 86_400)
 
@@ -253,7 +251,7 @@ final class SearchTests: XCTestCase {
 
     // MARK: - Performance
 
-    /// Fix 15: a keystroke cost 52 ms at 2,000 clippings in a release build. The
+    /// A keystroke cost 52 ms at 2,000 clippings in a release build. The
     /// target is under 8 ms in release; this runs in debug, so it only guards
     /// against the old order of magnitude and prints the real number.
     func testSearchSpeedOnTwoThousandClippings() {

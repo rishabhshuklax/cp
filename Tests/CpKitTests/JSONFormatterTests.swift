@@ -1,7 +1,7 @@
 import XCTest
 @testable import CpKit
 
-/// Fix 11: formatting JSON must change whitespace and nothing else.
+/// Formatting JSON must change whitespace and nothing else.
 final class JSONFormatterTests: XCTestCase {
 
     private let input = #"{"name":"cp","version":"1.0.0","price":10.10,"id":12345678901234567890,"z":{},"a":[1e5,-0.0,"\u00e9\n\"q\"",[]],"ok":true,"none":null}"#

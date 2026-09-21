@@ -15,7 +15,7 @@ final class ModelTests: XCTestCase {
         XCTAssertNotEqual(text.dedupeKey, color.dedupeKey)
     }
 
-    /// Fix 2: two different screenshots of the same size used to collapse into
+    /// Two different screenshots of the same size used to collapse into
     /// one row, because the key was the "Image W×H" payload.
     func testImagesDedupeOnContentHashNotSize() {
         let first = Clipping(kind: .image, payload: "Image 2880×1800", contentHash: "aaaa")
@@ -28,7 +28,7 @@ final class ModelTests: XCTestCase {
         XCTAssertNotEqual(legacy.dedupeKey, Clipping(kind: .image, payload: "Image 2880×1800").dedupeKey)
     }
 
-    /// Fix 4: every concealed copy is its own row with its own reason.
+    /// Every concealed copy is its own row with its own reason.
     func testConcealedClippingsNeverShareAKey() {
         let a = Clipping(kind: .text, payload: "", isConcealed: true, detail: "1Password")
         let b = Clipping(kind: .text, payload: "", isConcealed: true, detail: "looks like a credential")
@@ -64,7 +64,7 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(Clipping(kind: .text, payload: "x", detail: "swift").language)
     }
 
-    /// Fix 17: counts are stored at capture, and previews are capped.
+    /// Counts are stored at capture, and previews are capped.
     func testCountsAndPreviewAreCheapForBigClippings() {
         let line = String(repeating: "x", count: 99) + "\n"
         let big = Clipping(kind: .text, payload: String(repeating: line, count: 1_000))
@@ -114,7 +114,7 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(ColorParser.color(from: "not a colour"))
     }
 
-    /// Fix 9: `>1e30k` used to trap converting 1.024e33 to `Int`.
+    /// `>1e30k` used to trap converting 1.024e33 to `Int`.
     func testByteFormatRejectsWhatDoesNotFit() {
         XCTAssertNil(ByteFormat.parse("1e30k"))
         XCTAssertNil(ByteFormat.parse("1e30"))

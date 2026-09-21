@@ -26,7 +26,7 @@ final class PasterTests: XCTestCase {
         return items.allSatisfy { $0.types.contains(Paster.ownPasteboardType) }
     }
 
-    /// Fix 1: the change count to ignore is the one after the write, and the
+    /// The change count to ignore is the one after the write, and the
     /// write is marked as cp's own.
     func testWriteReturnsTheCountItLandedAtAndMarksItsItems() {
         let before = pasteboard.changeCount
@@ -37,7 +37,7 @@ final class PasterTests: XCTestCase {
         XCTAssertTrue(everyItemIsMarked)
     }
 
-    /// Fix 3: file references come with their paths as plain text.
+    /// File references come with their paths as plain text.
     func testFileURLsCarryTheirPathsAsText() {
         let urls = [URL(fileURLWithPath: "/Users/me/a.txt"), URL(fileURLWithPath: "/Users/me/b c.png")]
         paster.write(PastePayload(fileURLs: urls))

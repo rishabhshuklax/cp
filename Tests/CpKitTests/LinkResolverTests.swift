@@ -76,7 +76,7 @@ final class LinkResolverTests: XCTestCase {
         XCTAssertNil(LinkResolver.parseTitle(from: "<html><body>no title</body></html>"))
     }
 
-    /// Fix 16: arrowing onto a link fired the lookup twice; the second call
+    /// Arrowing onto a link fired the lookup twice; the second call
     /// cancelled the first, the cancelled run was cached as "no title", and the
     /// link never resolved.
     func testACancelledCallerDoesNotSpoilTheLookup() async {
@@ -95,7 +95,7 @@ final class LinkResolverTests: XCTestCase {
         XCTAssertEqual(StubServer.requests.filter { $0.path == "/pull/1234" }.count, 1, "one request for both callers")
     }
 
-    /// Fix 16: `www.` links had no host, so they could not be looked up at all.
+    /// `www.` links had no host, so they could not be looked up at all.
     func testWWWLinksResolve() async {
         let resolver = LinkResolver(configuration: StubServer.configuration)
         let resolved = await resolver.resolve(urlString: "www.apple.com/mac")
@@ -123,7 +123,7 @@ final class LinkPreviewsTests: XCTestCase {
         try await super.tearDown()
     }
 
-    /// Fix 16: titles are persisted, so a link is looked up once, not once a launch.
+    /// Titles are persisted, so a link is looked up once, not once a launch.
     func testTitlesPersistAndFaviconsAreKeptByHost() throws {
         let settings = Settings(defaults: MemoryDefaults())
         settings.resolveLinkTitles = true

@@ -68,3 +68,39 @@ extension XCTestCase {
         return true
     }
 }
+
+/// Credential-shaped strings for the privacy tests, assembled at run time.
+///
+/// Written out as literals they match the patterns that secret scanners look
+/// for, and a repository full of "leaked tokens" is a poor first impression
+/// even when every one of them is made up. None of these has ever been valid.
+enum FakeSecret {
+    private static let filler = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+    static let github = "ghp" + "_" + filler
+    static let openAI = "sk" + "-proj-" + filler
+    static let slack = "xoxb" + "-123456789012-" + String(filler.prefix(12))
+    static let gitLab = "glpat" + "-" + String(filler.prefix(20))
+    /// Amazon's own documented example key.
+    static let aws = "AKIA" + "IOSFODNN7EXAMPLE"
+    /// Three base64url segments, shaped like a JWT and signed by nobody.
+    static let jwt = ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "dBjftJeZ4CVPmB92K27uhbUJU1p1r"]
+        .joined(separator: ".")
+}
+
+/// Ages, in seconds, that land on the day a test means whatever the clock says.
+///
+/// "Sixty seconds ago" is yesterday for the first minute after midnight, and
+/// "twenty-six hours ago" is the day before yesterday until two in the
+/// morning. A suite that groups by day has to measure from midnight instead.
+enum Ago {
+    private static var sinceMidnight: TimeInterval {
+        let now = Date()
+        return now.timeIntervalSince(Calendar.current.startOfDay(for: now))
+    }
+
+    /// A moment ago, and certainly today.
+    static var today: TimeInterval { min(60, sinceMidnight / 2) }
+    /// An hour before midnight: always yesterday.
+    static var yesterday: TimeInterval { sinceMidnight + 3_600 }
+}

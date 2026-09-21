@@ -172,7 +172,7 @@ final class PickerModelTests: XCTestCase {
     }
 
     func testSectionsOnlyWithoutAQuery() {
-        add("today", age: 60)
+        add("today", age: Ago.today)
         add("last week", age: 6 * 86_400)
         model.open(pointer: pointer)
         XCTAssertEqual(model.items.compactMap { if case .section(let day) = $0 { return day.rawValue } else { return nil } },

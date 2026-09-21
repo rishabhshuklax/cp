@@ -10,7 +10,7 @@ struct CpApp: App {
     private let controller = AppController.shared
 
     /// Bound rather than implied: the scene is only in the menu bar while this
-    /// is true, and the audit could not find cp's icon at all.
+    /// is true.
     @State private var menuBarInserted = true
 
     var body: some Scene {

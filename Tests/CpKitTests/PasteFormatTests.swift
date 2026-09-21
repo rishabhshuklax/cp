@@ -7,7 +7,7 @@ final class PasteFormatTests: XCTestCase {
 
     // MARK: - Links
 
-    /// Fix 10: "Remove tracking" matched "si" as a prefix and took `size`,
+    /// "Remove tracking" matched "si" as a prefix and took `size`,
     /// `since`, `sid` and a presigned S3 link's `Signature` with it.
     func testCleanLinkRemovesOnlyTrackingParameters() {
         let shop = "https://shop.example.com/search?q=shoes&size=10&since=2024-01-01&sid=42&utm_source=mail&si=abc&fbclid=x#top"
@@ -167,7 +167,7 @@ final class PasteFormatTests: XCTestCase {
         XCTAssertNil(render(image, .original), "no asset on disk")
     }
 
-    /// Fix 3: every `.file` clipping pasted as a file reference with no text.
+    /// Every `.file` clipping pasted as a file reference with no text.
     func testFilesPasteAsReferencesOnlyWhenTheyArrivedAsFiles() {
         let (store, directory) = makeStore()
         defer { TestDirectory.remove(directory) }
@@ -220,7 +220,7 @@ final class PasteFormatTests: XCTestCase {
 
     // MARK: - Rich text
 
-    /// Fix 5: every RTF names a font, so every RTF was typed rich.
+    /// Every RTF names a font, so every RTF was typed rich.
     func testRichOnlyWhenFormattingIsReal() throws {
         func attributed(_ build: (NSMutableAttributedString) -> Void) -> NSAttributedString {
             let text = NSMutableAttributedString(string: "Some words here\n",

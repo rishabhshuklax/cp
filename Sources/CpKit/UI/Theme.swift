@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The design tokens, taken from the approved prototype.
+/// The design tokens.
 ///
 /// Two rules the rest of the UI is held to:
 ///
@@ -122,7 +122,7 @@ public enum Theme {
     public static let scrim = dynamic(light: rgba(250, 250, 252, 0.92), dark: rgba(30, 30, 35, 0.86))
     public static let windowBackground = dynamic(light: hex(0xFBFBFD), dark: hex(0x1D1D20))
 
-    /// Syntax colours, matching the prototype. Code is the one content type where
+    /// Syntax colours. Code is the one content type where
     /// colour carries meaning rather than decoration.
     public enum Code {
         public static let keyword = dynamic(light: hex(0xAD3DA4), dark: hex(0xFF7AB2))
@@ -225,7 +225,7 @@ public enum ColorParser {
         )
     }
 
-    /// Ink that stays legible on a swatch: the prototype's luminance rule.
+    /// Ink that stays legible on a swatch: a plain luminance rule.
     public static func ink(on payload: String) -> Color {
         let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let nsColor = color(from: trimmed).map(NSColor.init)?.usingColorSpace(.sRGB) else { return .white }
