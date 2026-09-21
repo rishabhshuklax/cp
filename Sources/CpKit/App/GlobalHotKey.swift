@@ -12,23 +12,6 @@ import Foundation
 /// prompt in front of first launch for something that does not need one.
 public final class GlobalHotKey {
 
-    public struct Combination: Equatable, Sendable {
-        public let keyCode: UInt32
-        public let modifiers: UInt32
-
-        public init(keyCode: UInt32, modifiers: UInt32) {
-            self.keyCode = keyCode
-            self.modifiers = modifiers
-        }
-
-        /// ⇧⌘V — the shortcut every clipboard manager on the platform has trained
-        /// people to reach for.
-        public static let shiftCommandV = Combination(
-            keyCode: UInt32(kVK_ANSI_V),
-            modifiers: UInt32(cmdKey | shiftKey)
-        )
-    }
-
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     private let identifier: UInt32
@@ -49,7 +32,7 @@ public final class GlobalHotKey {
     }
 
     @discardableResult
-    public func register(_ combination: Combination, handler: @escaping () -> Void) -> Bool {
+    public func register(_ combination: HotKeyCombo, handler: @escaping () -> Void) -> Bool {
         unregister()
         self.handler = handler
         Self.registry[identifier] = self

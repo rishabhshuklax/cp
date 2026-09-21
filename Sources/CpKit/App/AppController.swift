@@ -48,11 +48,11 @@ public final class AppController {
         NSApp.setActivationPolicy(.accessory)
         monitor.start()
 
-        let registered = hotKey.register(.shiftCommandV) { [weak self] in
+        let registered = hotKey.register(settings.hotKey) { [weak self] in
             self?.togglePicker()
         }
         if !registered {
-            lastError = "Couldn't register ⇧⌘V — another app may already own it."
+            lastError = "Couldn't register \(settings.hotKey.displayString) — another app may already own it."
         }
     }
 
