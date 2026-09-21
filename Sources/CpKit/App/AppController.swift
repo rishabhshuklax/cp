@@ -22,6 +22,8 @@ public final class AppController: PickerHost {
     private let pickerHotKey = GlobalHotKey()
     private var picker: PickerWindow!
     private var toastWindow: ToastWindow!
+    public private(set) var switcher: QuickSwitch!
+    private var switcherWindow: SwitcherWindow!
 
     /// The app the paste is aimed at, captured when the picker opens: by the
     /// time you choose, the answer can have changed.
@@ -64,6 +66,51 @@ public final class AppController: PickerHost {
             // Clips left in the stack take over ⌘V once the picker is gone.
             self?.stack.armIfNeeded()
         }
+
+        switcher = QuickSwitch(
+            isHoldingModifiers: { [weak self] in
+                guard let self else { return false }
+                return NSEvent.modifierFlags.contains(self.settings.hotKey.anchorModifier)
+            },
+            clipCount: { [weak self] in
+                min(Theme.Metric.hudCards, self?.store.clippings.count ?? 0)
+            },
+            holdToSwitch: { [weak self] in self?.settings.holdToSwitch ?? false }
+        )
+        switcherWindow = SwitcherWindow(store: store, links: links, switcher: switcher)
+        switcher.handleEvents { [weak self] event in self?.apply(event) }
+    }
+
+    // MARK: - Quick switch
+
+    /// What the state machine decided, carried out.
+    private func apply(_ event: QuickSwitch.Event) {
+        switch event {
+        case .openPicker:
+            showPicker()
+        case .closePicker:
+            hidePicker()
+        case .showHUD(let index):
+            pasteTarget = currentTarget()
+            hidePicker()
+            switcherWindow.show(index: index, clippings: recentForSwitcher())
+        case .selectHUD(let index):
+            switcherWindow.update(index: index)
+        case .hideHUD:
+            switcherWindow.hide()
+        case .paste(let index):
+            let clippings = switcherWindow.current
+            switcherWindow.hide()
+            guard clippings.indices.contains(index) else { return }
+            let clipping = clippings[index]
+            paste(clipping, as: PasteFormats.defaultFormat(for: clipping, settings: settings))
+        }
+    }
+
+    /// The most recent clips, newest first — the same order ⌘V walks back
+    /// through, which is what makes the second card the obvious first stop.
+    private func recentForSwitcher() -> [Clipping] {
+        Array(store.clippings.prefix(Theme.Metric.hudCards))
     }
 
     public func start() {
@@ -80,6 +127,7 @@ public final class AppController: PickerHost {
         monitor.stop()
         pickerHotKey.unregister()
         stack.disarm()
+        switcher.cancel()
     }
 
     // MARK: - Hot keys
@@ -92,7 +140,7 @@ public final class AppController: PickerHost {
     }
 
     private func hotKeyPressed() {
-        togglePicker()
+        switcher.hotKeyPressed(pickerVisible: picker.isVisible)
     }
 
     // MARK: - The picker
