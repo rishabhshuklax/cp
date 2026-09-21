@@ -130,29 +130,3 @@ public struct SearchQuery: Equatable, Sendable {
         return true
     }
 }
-
-public enum ByteFormat {
-    public static func short(_ bytes: Int) -> String {
-        if bytes < 1_024 { return "\(bytes) B" }
-        if bytes < 1_024 * 1_024 { return String(format: "%.1f KB", Double(bytes) / 1_024) }
-        return String(format: "%.1f MB", Double(bytes) / (1_024 * 1_024))
-    }
-
-    /// Parses `1kb`, `20k`, `2mb`, `512` into a byte count.
-    public static func parse(_ input: String) -> Int? {
-        let trimmed = input.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !trimmed.isEmpty else { return nil }
-
-        let multipliers: [(suffix: String, factor: Int)] = [
-            ("mb", 1_024 * 1_024), ("m", 1_024 * 1_024),
-            ("kb", 1_024), ("k", 1_024),
-            ("b", 1),
-        ]
-        for (suffix, factor) in multipliers where trimmed.hasSuffix(suffix) {
-            let number = trimmed.dropLast(suffix.count)
-            guard let value = Double(number) else { return nil }
-            return Int(value * Double(factor))
-        }
-        return Int(trimmed)
-    }
-}
