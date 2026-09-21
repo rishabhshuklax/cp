@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Observation
 import SwiftUI
 
@@ -6,7 +7,7 @@ import SwiftUI
 /// question every one of them ends up asking — which app is this going into?
 @Observable
 @MainActor
-public final class AppController: PickerHost {
+public final class AppController: PickerHost, LibraryHost {
 
     public let settings: Settings
     public let store: ClippingStore
@@ -15,13 +16,16 @@ public final class AppController: PickerHost {
     public let toasts = ToastCenter()
     public let stack: PasteStack
     public let pickerModel: PickerModel
+    public let libraryModel: LibraryModel
 
     let monitor: PasteboardMonitor
     let paster: PasteWriting
 
     private let pickerHotKey = GlobalHotKey()
+    private let libraryHotKey = GlobalHotKey()
     private var picker: PickerWindow!
     private var toastWindow: ToastWindow!
+    private var library: LibraryWindow!
     private let chip = FormatChipWindow()
     public private(set) var switcher: QuickSwitch!
     private var switcherWindow: SwitcherWindow!
@@ -53,6 +57,7 @@ public final class AppController: PickerHost {
         self.monitor = PasteboardMonitor(pasteboard: pasteboard, settings: settings, archive: archive)
         self.stack = PasteStack(store: store, settings: settings, paster: paster)
         self.pickerModel = PickerModel(store: store, settings: settings, links: links, stack: stack)
+        self.libraryModel = LibraryModel(store: store, settings: settings, links: links)
 
         monitor.onCapture = { [weak self] clipping, secret in
             self?.store.ingest(clipping, secret: secret)
@@ -60,8 +65,10 @@ public final class AppController: PickerHost {
         stack.ignoreChange = { [weak self] count in self?.monitor.ignore(changeCount: count) }
         stack.toast = { [weak self] text in self?.toasts.show(text) }
         pickerModel.host = self
+        libraryModel.host = self
 
         picker = PickerWindow(model: pickerModel)
+        library = LibraryWindow(model: libraryModel)
         toastWindow = ToastWindow(center: toasts)
         picker.onHide = { [weak self] in
             // Clips left in the stack take over ⌘V once the picker is gone.
@@ -120,6 +127,11 @@ public final class AppController: PickerHost {
         NSApp.setActivationPolicy(.accessory)
         monitor.start()
         registerHotKey()
+        // Skipped silently when something else owns it: the menu bar opens the
+        // Library too, and a shortcut clash is not worth an alert at launch.
+        libraryHotKey.register(HotKeyCombo(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | optionKey))) { [weak self] in
+            self?.openLibrary()
+        }
         watchFrontmostApp()
         observeToasts()
     }
@@ -128,6 +140,7 @@ public final class AppController: PickerHost {
         chip.hide()
         monitor.stop()
         pickerHotKey.unregister()
+        libraryHotKey.unregister()
         stack.disarm()
         switcher.cancel()
     }
@@ -262,6 +275,47 @@ public final class AppController: PickerHost {
 
     public func openSettings() {
         // Settings is its own window; it lands with the rest of the chrome.
+    }
+
+    // MARK: - The Library
+
+    public var isLibraryVisible: Bool { library.isVisible }
+
+    public func openLibrary() {
+        hidePicker()
+        chip.hide()
+        library.show()
+    }
+
+    // MARK: - LibraryHost
+
+    public func copyToClipboard(_ clipping: Clipping) {
+        let format = PasteFormats.defaultFormat(for: clipping, settings: settings)
+        guard let payload = PasteRenderer.payload(for: clipping, as: format, store: store) else { return }
+        monitor.ignore(changeCount: paster.write(payload))
+        toasts.show("Copied · press ⌘V")
+    }
+
+    public func delete(_ ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        if ids.count == 1, let clipping = store.clipping(withID: ids[0]) {
+            delete(clipping)
+            return
+        }
+        ids.forEach { id in if stack.contains(id) { stack.toggle(id) } }
+        store.delete(ids)
+        libraryModel.clearSelection()
+        toasts.show("Deleted \(ids.count)")
+    }
+
+    public func setPinned(_ ids: [UUID], pinned: Bool) {
+        store.setPinned(ids, pinned)
+        toasts.show(pinned ? "Pinned \(ids.count)" : "Unpinned \(ids.count)")
+    }
+
+    public func addToStack(_ ids: [UUID]) {
+        for id in ids where !stack.contains(id) { stack.toggle(id) }
+        toasts.show("\(stack.count) in the stack")
     }
 
     public func openLink(_ clipping: Clipping) {
