@@ -3,25 +3,56 @@
 A clipboard manager for macOS that shows you the thing you copied, not a grey
 line about it.
 
+![The cp picker over a document: the selected clip, a piece of Swift, is shown highlighted at the top, with one line per recent clip under it](docs/images/picker.png)
+
 Press `⇧⌘V` and the clip you are about to paste fills the top of the panel,
 drawn as itself: a link with its page title, code with its colours, a colour as
-a swatch, a screenshot as the picture. Hold `⇧⌘` and tap `V` to flick back
-through recent clips the way `⌘Tab` flicks through apps, and let go to paste.
+a swatch, a screenshot as the picture. Under it, one line per clip, newest
+first. `↩` pastes into the app you were in.
 
-- **Quick switch.** Hold the shortcut, tap `V`, release. No window to read.
-- **Choose the format after you paste.** A small chip appears where the paste
-  landed: Link · Title · Markdown, Rich · Plain, HEX · RGB · HSL. Click one and
-  the paste is swapped in place.
-- **Search inside screenshots.** Text in images is read on your Mac (Vision),
-  so `invoice` finds the screenshot of the invoice.
-- **A stack.** `⇧↩` collects clips; each `⌘V` then pastes the next one.
-- **Passwords don't stay.** Copies from password managers are never recorded,
-  and anything marked concealed shows as a countdown and is forgotten. Nothing
-  concealed is ever written to disk.
-- **Search that matches what you typed.** Literal, across titles, bodies, page
-  titles, URLs, file paths, app names and image text. 2 ms a keystroke at 2,000
-  clips.
-- **A Library** (`⌥⌘V`) for browsing: by kind, by the app you copied from, by day.
+### Quick switch
+
+Hold `⇧⌘` and tap `V` to flick back through recent clips the way `⌘Tab` flicks
+through apps. Let go to paste. No window to read.
+
+![Quick switch: eight recent clips as cards, each drawn as itself, the second one selected](docs/images/quick-switch.png)
+
+### Choose the format after you paste
+
+A small chip appears where the paste landed: Link · Title · Markdown, Rich ·
+Plain, HEX · RGB · HSL. Click one and the paste is swapped in place. The toast
+always names the app it pasted into.
+
+![A pasted link in a document with a chip under it offering Link, Title and Markdown, and a toast reading Pasted into Notes](docs/images/format-chip.png)
+
+### Search inside screenshots
+
+Text in images is read on your Mac (Vision), so `invoice` finds the screenshot
+of the invoice and shows you where the word is. Search is literal, across
+titles, bodies, page titles, URLs, file paths, app names and image text, and
+takes about 2 ms a keystroke at 2,000 clips.
+
+![Searching for the word invoice finds a screenshot; the matching words are boxed in the picture](docs/images/search-in-image.png)
+
+### A stack
+
+`⇧↩` collects clips. Paste them in order with `⌘↩`, or close the picker and
+each `⌘V` pastes the next one. Hold `⌘` and the rows show their numbers.
+
+![The picker with three clips in the stack, numbered badges on their rows, and a tray offering to paste three in order](docs/images/stack.png)
+
+### The Library
+
+`⌥⌘V` opens a window for browsing rather than pasting: by kind, by the app you
+copied from, by day.
+
+![The Library window: a sidebar of kinds and source apps, clips as tiles grouped by day, and an inspector for the selected clip](docs/images/library.png)
+
+### Passwords don't stay
+
+Copies from password managers are never recorded. Anything marked concealed
+shows as a countdown and is then forgotten, and nothing concealed is ever
+written to disk.
 
 Everything stays on your Mac. There is no account, no sync and no network
 access unless you turn on page titles for links.
@@ -185,6 +216,9 @@ Issues and pull requests are welcome. `make test` should pass, new behaviour
 should come with a test, and comments should say *why* rather than *what* — the
 existing code is the style guide. UI changes are easier to review with a
 screenshot.
+
+The images in this README are the app's own views drawn onto a staged
+desktop, so that nobody's real clipboard ends up in a repository.
 
 ## Licence
 

@@ -141,10 +141,17 @@ public struct ClipCard: View {
            let thumbnail = ThumbnailStore.shared.thumbnail(
                filename: file, url: store.assetURL(file), maxPixel: style == .card ? 420 : 700
            ) {
-            Image(nsImage: thumbnail)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The picture is an overlay of a clear, flexible box rather than a
+            // view in its own right: an image set to fill reports its *filled*
+            // size to the layout, so a 16:10 screenshot in a 150pt-tall tile
+            // claims 240pt of width and lands on top of the tile beside it.
+            // The box takes whatever it is offered, and the clip is to the box.
+            Color.clear
+                .overlay {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                }
                 .clipped()
         } else {
             Image(systemName: "photo")
