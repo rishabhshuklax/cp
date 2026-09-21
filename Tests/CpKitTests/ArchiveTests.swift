@@ -70,12 +70,13 @@ final class ArchiveTests: XCTestCase {
         archive.flush()
 
         let log = try String(contentsOf: logURL, encoding: .utf8)
-        XCTAssertTrue(log.contains(".100Z") || log.contains(".099Z"), log)
+        XCTAssertTrue(log.contains(".100000Z") && log.contains(".400000Z"), log)
+        XCTAssertEqual(ClippingArchive.encode(Date(timeIntervalSinceReferenceDate: 0.9999996)), "2001-01-01T00:00:01.000000Z")
 
         let loaded = try ClippingArchive(directory: directory).load()
         XCTAssertEqual(loaded.map(\.payload), ["second", "first"])
-        XCTAssertEqual(loaded[0].lastCopiedAt.timeIntervalSince(second.lastCopiedAt), 0, accuracy: 0.001)
-        XCTAssertEqual(loaded[1].createdAt.timeIntervalSince(first.createdAt), 0, accuracy: 0.001)
+        XCTAssertEqual(loaded[0].lastCopiedAt.timeIntervalSince(second.lastCopiedAt), 0, accuracy: 0.000_002)
+        XCTAssertEqual(loaded[1].createdAt.timeIntervalSince(first.createdAt), 0, accuracy: 0.000_002)
     }
 
     /// Fix 6: a crash mid-write leaves a line with no newline. The next record

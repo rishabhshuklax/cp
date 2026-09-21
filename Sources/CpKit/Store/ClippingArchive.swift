@@ -65,7 +65,7 @@ public final class ClippingArchive: @unchecked Sendable {
         // across a relaunch. Lines from before the redesign have whole seconds.
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
-            try container.encode(date.formatted(ClippingArchive.fractionalDates))
+            try container.encode(ClippingArchive.encode(date))
         }
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -78,6 +78,21 @@ public final class ClippingArchive: @unchecked Sendable {
 
     static let fractionalDates = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
     static let wholeSecondDates = Date.ISO8601FormatStyle()
+
+    /// `2026-09-21T13:32:34.658123Z`: ISO 8601 to the microsecond. The format
+    /// style stops at milliseconds, and two records a few microseconds apart
+    /// (a restore right after a copy) should still come back in order.
+    static func encode(_ date: Date) -> String {
+        var seconds = date.timeIntervalSinceReferenceDate.rounded(.down)
+        var micros = Int(((date.timeIntervalSinceReferenceDate - seconds) * 1_000_000).rounded())
+        if micros >= 1_000_000 {
+            seconds += 1
+            micros -= 1_000_000
+        }
+        let whole = Date(timeIntervalSinceReferenceDate: seconds).formatted(wholeSecondDates)
+        let digits = String(micros)
+        return whole.dropLast() + "." + String(repeating: "0", count: 6 - digits.count) + digits + "Z"
+    }
 
     public var assetsDirectory: URL { assetsURL }
 
