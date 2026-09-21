@@ -33,12 +33,12 @@ public final class AppController {
         self.archive = archive
         self.settings = settings
         self.store = ClippingStore(archive: archive, settings: settings)
-        self.paster = Paster(archive: archive)
+        self.paster = Paster()
         self.monitor = PasteboardMonitor(settings: settings, archive: archive)
         self.pickerModel = PickerModel(store: store, settings: settings, linkResolver: linkResolver)
 
-        monitor.onCapture = { [weak self] clipping in
-            self?.store.ingest(clipping)
+        monitor.onCapture = { [weak self] clipping, secret in
+            self?.store.ingest(clipping, secret: secret)
         }
     }
 
@@ -99,8 +99,8 @@ public final class AppController {
             onChoose: { [weak self] clipping, plainText in
                 self?.choose(clipping, asPlainText: plainText)
             },
-            onTransform: { [weak self] clipping, transform in
-                self?.applyTransform(transform, to: clipping)
+            onTransform: { [weak self] clipping, format in
+                self?.paste(clipping, as: format)
             },
             onTogglePin: { [weak self] id in
                 self?.store.togglePin(id)
@@ -125,53 +125,32 @@ public final class AppController {
     // MARK: - Choosing
 
     public func choose(_ clipping: Clipping, asPlainText: Bool) {
-        guard !clipping.isConcealed else {
-            lastError = "That clipping was never stored."
+        let format = asPlainText ? PasteFormat.plainText : PasteFormats.defaultFormat(for: clipping, settings: settings)
+        paste(clipping, as: format)
+    }
+
+    public func paste(_ clipping: Clipping, as format: PasteFormat) {
+        guard let payload = PasteRenderer.payload(for: clipping, as: format, store: store)
+                ?? PasteRenderer.payload(for: clipping, as: .original, store: store) else {
+            lastError = clipping.isConcealed ? "That password has been forgotten." : "Nothing to paste."
             hidePicker()
             return
         }
-
-        paster.writeToPasteboard(clipping, asPlainText: asPlainText)
-        monitor.suppressNextChange()
-        finishPaste()
-    }
-
-    public func applyTransform(_ transform: Transform, to clipping: Clipping) {
-        let transformed = transform.apply(clipping.payload)
-        paster.writeRawText(transformed)
-        monitor.suppressNextChange()
-        finishPaste()
-    }
-
-    private func finishPaste() {
+        monitor.ignore(changeCount: paster.write(payload))
         hidePicker()
-
-        guard settings.pasteAutomatically else { return }
-        guard paster.hasAccessibilityPermission else {
-            lastError = "Copied. Grant Accessibility access to paste automatically."
-            return
-        }
-
-        // The panel is non-activating, so the target should still be frontmost —
-        // but re-activating costs nothing and covers the case where something else
-        // grabbed focus while the picker was open.
-        pasteTarget?.activate()
-
-        // Let the panel finish ordering out and the target settle before the
-        // synthetic ⌘V, or the keystroke lands in a window that is going away.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            MainActor.assumeIsolated {
-                _ = self?.paster.synthesizePaste()
+        paster.paste(into: pasteTarget, automatic: settings.pasteAutomatically) { [weak self] outcome in
+            if outcome == .copiedOnly(.notAllowed) {
+                self?.lastError = "Copied. Grant Accessibility access to paste automatically."
             }
         }
     }
 
     // MARK: - Permissions
 
-    public var hasAccessibilityPermission: Bool { paster.hasAccessibilityPermission }
+    public var hasAccessibilityPermission: Bool { paster.canPaste }
 
     public func requestAccessibilityPermission() {
-        paster.requestAccessibilityPermission()
+        paster.requestPermission()
     }
 
     public func clearError() { lastError = nil }

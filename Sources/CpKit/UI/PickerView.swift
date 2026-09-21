@@ -12,7 +12,7 @@ public struct PickerView: View {
     @Bindable private var model: PickerModel
     private let archive: ClippingArchive?
     private let onChoose: (Clipping, Bool) -> Void
-    private let onTransform: (Clipping, Transform) -> Void
+    private let onTransform: (Clipping, PasteFormat) -> Void
     private let onTogglePin: (UUID) -> Void
     private let onDelete: (UUID) -> Void
     private let onDismiss: () -> Void
@@ -21,7 +21,7 @@ public struct PickerView: View {
         model: PickerModel,
         archive: ClippingArchive?,
         onChoose: @escaping (Clipping, Bool) -> Void,
-        onTransform: @escaping (Clipping, Transform) -> Void,
+        onTransform: @escaping (Clipping, PasteFormat) -> Void,
         onTogglePin: @escaping (UUID) -> Void,
         onDelete: @escaping (UUID) -> Void,
         onDismiss: @escaping () -> Void
@@ -52,9 +52,9 @@ public struct PickerView: View {
                     clipping: model.selected,
                     archive: archive,
                     resolvedTitle: model.selected.flatMap { model.title(for: $0) },
-                    onTransform: { transform in
+                    onTransform: { format in
                         guard let clipping = model.selected else { return }
-                        onTransform(clipping, transform)
+                        onTransform(clipping, format)
                     }
                 )
             }
@@ -256,8 +256,8 @@ public struct PickerView: View {
         Button(clipping.isPinned ? "Unpin" : "Pin") { onTogglePin(clipping.id) }
         Button("Paste as plain text") { onChoose(clipping, true) }
         Divider()
-        ForEach(Transform.available(for: clipping.kind)) { transform in
-            Button(transform.title) { onTransform(clipping, transform) }
+        ForEach(PasteFormats.menu(for: clipping), id: \.self) { format in
+            Button(format.menuLabel(for: clipping)) { onTransform(clipping, format) }
         }
         Divider()
         Button("Delete", role: .destructive) { onDelete(clipping.id) }

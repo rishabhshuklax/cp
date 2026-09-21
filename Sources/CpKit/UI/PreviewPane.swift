@@ -14,13 +14,13 @@ public struct PreviewPane: View {
     private let clipping: Clipping?
     private let archive: ClippingArchive?
     private let resolvedTitle: String?
-    private let onTransform: (Transform) -> Void
+    private let onTransform: (PasteFormat) -> Void
 
     public init(
         clipping: Clipping?,
         archive: ClippingArchive?,
         resolvedTitle: String? = nil,
-        onTransform: @escaping (Transform) -> Void
+        onTransform: @escaping (PasteFormat) -> Void
     ) {
         self.clipping = clipping
         self.archive = archive
@@ -64,10 +64,10 @@ public struct PreviewPane: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            let transforms = clipping.isConcealed ? [] : Transform.available(for: clipping.kind)
-            if !transforms.isEmpty {
+            let formats = Array(PasteFormats.menu(for: clipping).dropFirst())
+            if !formats.isEmpty {
                 Divider().overlay(Theme.separator)
-                transformBar(transforms)
+                transformBar(formats, for: clipping)
             }
         }
     }
@@ -208,14 +208,14 @@ public struct PreviewPane: View {
 
     // MARK: - Transforms
 
-    private func transformBar(_ transforms: [Transform]) -> some View {
+    private func transformBar(_ formats: [PasteFormat], for clipping: Clipping) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(transforms) { transform in
+                ForEach(formats, id: \.self) { format in
                     Button {
-                        onTransform(transform)
+                        onTransform(format)
                     } label: {
-                        Label(transform.title, systemImage: transform.symbolName)
+                        Label(format.menuLabel(for: clipping), systemImage: format.symbolName)
                             .font(Theme.Font.metadata)
                             .labelStyle(.titleAndIcon)
                     }
