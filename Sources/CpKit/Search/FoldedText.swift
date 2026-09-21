@@ -92,13 +92,21 @@ struct FoldedText: Sendable {
         }
     }
 
-    /// Every non-overlapping occurrence.
-    func allMatches(_ needle: [UInt8]) -> [Int] {
+    /// Non-overlapping occurrences, at most `limit` of them.
+    func allMatches(_ needle: [UInt8], limit: Int = .max) -> [Int] {
+        guard !needle.isEmpty, needle.count <= bytes.count else { return [] }
         var result: [Int] = []
-        var from = 0
-        while let found = firstMatch(needle, from: from) {
-            result.append(found)
-            from = found + needle.count
+        bytes.withUnsafeBufferPointer { hay in
+            needle.withUnsafeBufferPointer { pin in
+                guard let base = hay.baseAddress, let pinBase = pin.baseAddress else { return }
+                var from = 0
+                while result.count < limit, from + pin.count <= hay.count,
+                      let found = memmem(base + from, hay.count - from, pinBase, pin.count) {
+                    let offset = base.distance(to: found.assumingMemoryBound(to: UInt8.self))
+                    result.append(offset)
+                    from = offset + pin.count
+                }
+            }
         }
         return result
     }

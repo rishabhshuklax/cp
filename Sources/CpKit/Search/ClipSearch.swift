@@ -248,17 +248,22 @@ final class SearchIndex {
             return clippings.compactMap { filter.passes($0) ? ClipHit(clipping: $0) : nil }
         }
 
-        var hits: [ClipHit] = []
-        for clipping in clippings where filter.passes(clipping) {
-            let entry = entry(for: clipping)
+        // Rank small keys, then build the hits in order: sorting thousands of
+        // full hits for a one-letter query moved more memory than it compared.
+        var keys: [(score: Int, date: Date, slot: Int)] = []
+        var found: [(index: Int, entry: Entry, match: Match)] = []
+        for index in clippings.indices where filter.passes(clippings[index]) {
+            let entry = entry(for: clippings[index])
             guard let match = Self.match(entry, words: words) else { continue }
-            hits.append(Self.hit(for: clipping, entry: entry, match: match, words: words, now: now))
+            let date = clippings[index].lastCopiedAt
+            keys.append((match.score + Self.recencyBonus(date, now: now), date, found.count))
+            found.append((index, entry, match))
         }
-        hits.sort { lhs, rhs in
-            if lhs.score != rhs.score { return lhs.score > rhs.score }
-            return lhs.clipping.lastCopiedAt > rhs.clipping.lastCopiedAt
+        keys.sort { $0.score != $1.score ? $0.score > $1.score : $0.date > $1.date }
+        return keys.map { key in
+            let item = found[key.slot]
+            return Self.hit(for: clippings[item.index], entry: item.entry, match: item.match, score: key.score, words: words)
         }
-        return hits
     }
 
     struct Match {
@@ -314,7 +319,7 @@ final class SearchIndex {
         }
     }
 
-    private static func hit(for clipping: Clipping, entry: Entry, match: Match, words: [[UInt8]], now: Date) -> ClipHit {
+    private static func hit(for clipping: Clipping, entry: Entry, match: Match, score: Int, words: [[UInt8]]) -> ClipHit {
         let titleRanges = ranges(of: words, in: entry.title.folded, original: entry.title.text)
 
         var snippet: String?
@@ -328,7 +333,7 @@ final class SearchIndex {
         let field: MatchField? = match.outside?.field ?? (match.titleMatched ? .title : (match.appMatched ? .app : nil))
         return ClipHit(
             clipping: clipping,
-            score: match.score + recencyBonus(clipping.lastCopiedAt, now: now),
+            score: score,
             field: field,
             titleRanges: titleRanges,
             snippet: snippet,
@@ -336,12 +341,16 @@ final class SearchIndex {
         )
     }
 
-    /// Every occurrence of every word, merged where they touch, as UTF-16
-    /// ranges in the original text.
+    /// Enough highlighted runs to show why a row matched; a one-letter query
+    /// would otherwise light up half the title.
+    static let rangeLimit = 16
+
+    /// Occurrences of every word, merged where they touch, as UTF-16 ranges in
+    /// the original text.
     static func ranges(of words: [[UInt8]], in folded: FoldedText, original: String) -> [NSRange] {
         var spans: [Range<Int>] = []
         for word in words {
-            for start in folded.allMatches(word) {
+            for start in folded.allMatches(word, limit: rangeLimit) {
                 spans.append(start..<(start + word.count))
             }
         }

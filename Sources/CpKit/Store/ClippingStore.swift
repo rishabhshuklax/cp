@@ -353,13 +353,19 @@ public final class ClippingStore {
     /// rewritten once it has grown to twice the live history, instead of on
     /// every copy once the history is full.
     private func trimIfNeeded() {
-        var budget = max(50, settings.historyLimit)
+        let limit = max(50, settings.historyLimit)
+        // Below the cap there is nothing to drop, and this runs on every copy.
+        guard clippings.count > limit else {
+            compactIfNeeded()
+            return
+        }
+        var budget = limit
         var dropped: [Clipping] = []
-        for clipping in clippings where !clipping.isPinned && !clipping.isConcealed {
+        for index in clippings.indices where !clippings[index].isPinned && !clippings[index].isConcealed {
             if budget > 0 {
                 budget -= 1
             } else {
-                dropped.append(clipping)
+                dropped.append(clippings[index])
             }
         }
         guard !dropped.isEmpty else {
@@ -377,7 +383,9 @@ public final class ClippingStore {
 
     private func compactIfNeeded() {
         guard let archive else { return }
-        let live = clippings.reduce(0) { $0 + ($1.isConcealed ? 0 : 1) }
+        // Every concealed clipping has an expiry pending; counting those is
+        // cheaper than walking the history on every copy.
+        let live = clippings.count - expiries.count
         guard recordsInLog > max(256, live * 2) else { return }
         archive.compact(liveClippings: clippings)
         recordsInLog = live
