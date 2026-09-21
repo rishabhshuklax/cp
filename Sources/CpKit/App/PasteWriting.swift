@@ -17,7 +17,6 @@ extension Paster: PasteWriting {}
 
 /// Somewhere to run a closure a little later. Real time in the app, controlled
 /// time in tests — the paste stack is all about the gaps between pastes.
-@MainActor
 public protocol Scheduling: Sendable {
     func run(after delay: TimeInterval, _ work: @escaping @MainActor () -> Void)
 }
