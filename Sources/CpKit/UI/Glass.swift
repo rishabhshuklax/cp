@@ -95,22 +95,22 @@ public struct CapsuleButton: View {
     }
 }
 
-/// Flat wash, or the accent, under the label. `.glass` and `.glassProminent`
-/// take over on macOS 26.
+/// A wash capsule, or the accent for the primary one.
+///
+/// Deliberately not `.glass`: these buttons sit *on* the results panel, which is
+/// already glass, and glass on glass is the legibility trap the whole visual
+/// language is written to avoid. The material stays on the surfaces — the search
+/// capsule, the panel, the HUD, the chip, the toast — and the controls on them
+/// are drawn in ink and wash.
 private struct CapsuleButtonStyle: ButtonStyle {
     let prominent: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         Group {
-            if #available(macOS 26, *) {
-                if prominent {
-                    configuration.label
-                        .glassEffect(.regular.tint(Theme.accent).interactive(), in: .capsule)
-                } else {
-                    configuration.label.glassEffect(.regular.interactive(), in: .capsule)
-                }
-            } else if prominent {
-                configuration.label.background(Theme.accent, in: Capsule())
+            if prominent {
+                configuration.label
+                    .background(Theme.accent, in: Capsule())
+                    .shadow(color: Theme.accent.opacity(0.32), radius: 7, y: 4)
             } else {
                 configuration.label
                     .background(Theme.wash, in: Capsule())

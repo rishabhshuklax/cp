@@ -89,25 +89,34 @@ public struct ClipCard: View {
     }
 
     private var code: some View {
-        Text(
-            clipping.kind == .json
-                ? CodeHighlighter.json(prettyJSON, font: .system(size: monoSize, design: .monospaced))
-                : CodeHighlighter.attributed(clipping.previewText(limit: 1_200).firstLines(10),
-                                             language: clipping.language,
-                                             font: .system(size: monoSize, design: .monospaced))
-        )
-        .lineSpacing(2.5)
-        .lineLimit(10)
-        .fixedSize(horizontal: true, vertical: false)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // Unwrapped, pinned to the left edge by the spacer, and clipped to the
+        // card: a snippet's shape is how you recognise it, and a card that let
+        // its lines out would paint over the tile beside it.
+        // An exact frame is the only thing that holds an unwrapped line: a
+        // flexible one still reports the text's own width, and the card would
+        // paint its snippet over the tile beside it.
+        GeometryReader { geometry in
+            Text(
+                clipping.kind == .json
+                    ? CodeHighlighter.json(prettyJSON, font: .system(size: monoSize, design: .monospaced))
+                    : CodeHighlighter.attributed(clipping.previewText(limit: 1_200).firstLines(10),
+                                                 language: clipping.language,
+                                                 font: .system(size: monoSize, design: .monospaced))
+            )
+            .lineSpacing(2.5)
+            .lineLimit(10)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .clipped()
+            .mask {
+                LinearGradient(
+                    stops: [.init(color: .black, location: 0.82), .init(color: .clear, location: 1)],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
+        }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
-        .mask {
-            LinearGradient(
-                stops: [.init(color: .black, location: 0.82), .init(color: .clear, location: 1)],
-                startPoint: .leading, endPoint: .trailing
-            )
-        }
     }
 
     private var prettyJSON: String {
