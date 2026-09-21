@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 
 /// Turns a URL clipping into a readable row: the page's own title and favicon,
 /// so `github.com/org/repo/pull/1234` reads as the pull request's name.
@@ -21,15 +22,23 @@ public actor LinkResolver {
     }
 
     private var cache: [String: Resolved] = [:]
-    private var inFlight: Set<String> = []
+    /// Failures are retried, but not on every arrow key: a dead link waits a
+    /// few minutes.
+    private var failures: [String: Date] = [:]
+    private var inFlight: [String: Task<Resolved?, Never>] = [:]
     private let session: URLSession
 
     /// Enough to reach `</title>` on any sane page without pulling down a 5 MB
     /// single-page-app bundle.
     private let byteLimit = 64 * 1_024
+    private let retryAfter: TimeInterval = 300
 
     public init() {
-        let configuration = URLSessionConfiguration.ephemeral
+        self.init(configuration: .ephemeral)
+    }
+
+    /// For tests, which answer requests themselves.
+    init(configuration: URLSessionConfiguration) {
         configuration.timeoutIntervalForRequest = 5
         configuration.timeoutIntervalForResource = 8
         configuration.httpCookieStorage = nil
@@ -39,28 +48,51 @@ public actor LinkResolver {
     }
 
     public func cached(for urlString: String) -> Resolved? {
-        cache[urlString]
+        Self.normalizedURL(urlString).flatMap { cache[$0.absoluteString] }
     }
 
+    /// The page's title and favicon. Callers asking for the same link at once
+    /// share one request, and the request runs in its own task: arrowing past a
+    /// link cancels the caller, and the old code then cached that cancelled run
+    /// as "no title", so the link never resolved.
     public func resolve(urlString: String) async -> Resolved? {
-        if let cached = cache[urlString] { return cached }
-        guard !inFlight.contains(urlString) else { return nil }
-        guard let url = URL(string: urlString), let host = url.host else { return nil }
+        guard let url = Self.normalizedURL(urlString), let host = url.host else { return nil }
+        let key = url.absoluteString
+        if let cached = cache[key] { return cached }
+        if let failed = failures[key], Date().timeIntervalSince(failed) < retryAfter { return nil }
+        if let running = inFlight[key] { return await running.value }
 
-        inFlight.insert(urlString)
-        defer { inFlight.remove(urlString) }
+        let task = Task { await Self.fetch(url, host: host, session: session, byteLimit: byteLimit) }
+        inFlight[key] = task
+        let result = await task.value
+        inFlight[key] = nil
+        if let result, result.title != nil || result.faviconData != nil {
+            cache[key] = result
+            failures[key] = nil
+        } else {
+            failures[key] = Date()
+        }
+        return result
+    }
 
-        async let titleTask = fetchTitle(url: url)
-        async let faviconTask = fetchFavicon(host: host, scheme: url.scheme ?? "https")
-
-        let resolved = Resolved(title: await titleTask, faviconData: await faviconTask)
-        cache[urlString] = resolved
-        return resolved
+    /// `www.apple.com/mac` has no scheme, so `URL` sees no host in it.
+    static func normalizedURL(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = trimmed.contains("://") ? trimmed : "https://" + trimmed
+        guard let url = URL(string: candidate), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", url.host?.isEmpty == false else { return nil }
+        return url
     }
 
     // MARK: - Fetching
 
-    private func fetchTitle(url: URL) async -> String? {
+    private static func fetch(_ url: URL, host: String, session: URLSession, byteLimit: Int) async -> Resolved? {
+        async let title = fetchTitle(url: url, session: session, byteLimit: byteLimit)
+        async let favicon = fetchFavicon(host: host, scheme: url.scheme ?? "https", session: session)
+        return Resolved(title: await title, faviconData: await favicon)
+    }
+
+    private static func fetchTitle(url: URL, session: URLSession, byteLimit: Int) async -> String? {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         // Ask for the head of the document only. Servers that ignore Range just
@@ -75,10 +107,10 @@ public actor LinkResolver {
         guard let html = String(data: head, encoding: .utf8)
             ?? String(data: head, encoding: .isoLatin1) else { return nil }
 
-        return Self.parseTitle(from: html)
+        return parseTitle(from: html)
     }
 
-    private func fetchFavicon(host: String, scheme: String) async -> Data? {
+    private static func fetchFavicon(host: String, scheme: String, session: URLSession) async -> Data? {
         guard let url = URL(string: "\(scheme)://\(host)/favicon.ico") else { return nil }
         guard let (data, response) = try? await session.data(from: url) else { return nil }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
@@ -115,5 +147,68 @@ public actor LinkResolver {
         // Collapse runs of spaces left behind by the newline replacement.
         let squeezed = unescaped.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
         return squeezed.isEmpty ? nil : String(squeezed.prefix(300))
+    }
+}
+
+/// Link titles and favicons for the UI: ask for a link as it is shown or
+/// selected, read the favicon back by host, and the title arrives on the
+/// clipping itself — persisted, so each link is looked up once, ever.
+@MainActor
+@Observable
+public final class LinkPreviews {
+
+    /// Favicons by host, for this session.
+    public private(set) var favicons: [String: NSImage] = [:]
+
+    @ObservationIgnored private let store: ClippingStore
+    @ObservationIgnored private let settings: Settings
+    @ObservationIgnored private let resolver: LinkResolver
+    @ObservationIgnored private var requested: Set<UUID> = []
+
+    public init(store: ClippingStore, settings: Settings, resolver: LinkResolver = LinkResolver()) {
+        self.store = store
+        self.settings = settings
+        self.resolver = resolver
+    }
+
+    /// Looks up a link's title and favicon, unless link titles are off or there
+    /// is nothing left to learn. Safe to call on every selection change: a link
+    /// already asked for is not asked for again.
+    public func request(_ c: Clipping) {
+        guard settings.resolveLinkTitles, c.kind == .url, !c.isConcealed else { return }
+        let host = c.host?.lowercased()
+        let needsTitle = c.linkTitle == nil
+        let needsIcon = host.map { favicons[$0] == nil } ?? false
+        guard needsTitle || needsIcon, !requested.contains(c.id) else { return }
+
+        requested.insert(c.id)
+        let id = c.id
+        let url = c.payload
+        let resolver = self.resolver
+        Task { [weak self] in
+            let resolved = await resolver.resolve(urlString: url)
+            guard let self else { return }
+            guard let resolved else {
+                // Let a later selection try again; the resolver spaces retries.
+                self.requested.remove(id)
+                return
+            }
+            self.apply(resolved, to: id, host: host)
+        }
+    }
+
+    public func favicon(forHost host: String) -> NSImage? {
+        favicons[host.lowercased()]
+    }
+
+    private func apply(_ resolved: LinkResolver.Resolved, to id: UUID, host: String?) {
+        if let data = resolved.faviconData, let host, favicons[host] == nil, let image = NSImage(data: data) {
+            image.size = NSSize(width: 16, height: 16)
+            favicons[host] = image
+        }
+        if let title = resolved.title, var current = store.clipping(withID: id), current.linkTitle != title {
+            current.linkTitle = title
+            store.update(current)
+        }
     }
 }
