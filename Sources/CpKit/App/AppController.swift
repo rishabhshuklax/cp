@@ -22,6 +22,7 @@ public final class AppController: PickerHost {
     private let pickerHotKey = GlobalHotKey()
     private var picker: PickerWindow!
     private var toastWindow: ToastWindow!
+    private let chip = FormatChipWindow()
     public private(set) var switcher: QuickSwitch!
     private var switcherWindow: SwitcherWindow!
 
@@ -124,6 +125,7 @@ public final class AppController: PickerHost {
     }
 
     public func stop() {
+        chip.hide()
         monitor.stop()
         pickerHotKey.unregister()
         stack.disarm()
@@ -207,6 +209,7 @@ public final class AppController: PickerHost {
         monitor.ignore(changeCount: paster.write(payload))
         // Hidden before the keystroke: the target has to be frontmost first.
         hidePicker()
+        chip.hide()
         paster.paste(into: pasteTarget, automatic: settings.pasteAutomatically) { [weak self] outcome in
             self?.report(outcome, for: clipping, format: format)
         }
@@ -216,8 +219,34 @@ public final class AppController: PickerHost {
         switch outcome {
         case .pasted(let appName):
             toasts.show("Pasted into \(appName ?? "the app")")
+            showChip(for: clipping, used: format)
         case .copiedOnly:
             toasts.show("Copied · press ⌘V")
+        }
+    }
+
+    /// The other formats this clipping could have gone in, offered where it
+    /// landed. Only for clippings that have another format worth offering.
+    private func showChip(for clipping: Clipping, used: PasteFormat) {
+        let formats = PasteFormats.chip(for: clipping)
+        guard formats.count > 1 else {
+            chip.hide()
+            return
+        }
+        let selected = formats.contains(used) ? used : formats[0]
+        chip.show(clipping: clipping, formats: formats, selected: selected, target: pasteTarget) { [weak self] format in
+            self?.replacePaste(of: clipping, with: format)
+        }
+    }
+
+    /// Swaps the paste just made for another format: ⌘Z, write, ⌘V. The write
+    /// carries cp's own marker, so the monitor does not capture it back.
+    private func replacePaste(of clipping: Clipping, with format: PasteFormat) {
+        guard let payload = PasteRenderer.payload(for: clipping, as: format, store: store) else { return }
+        showChip(for: clipping, used: format)
+        paster.replaceLastPaste(with: payload, in: pasteTarget) { [weak self] outcome in
+            guard case .copiedOnly = outcome else { return }
+            self?.toasts.show("Copied · press ⌘V")
         }
     }
 
