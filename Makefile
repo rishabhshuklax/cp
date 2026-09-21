@@ -19,7 +19,9 @@ app: ## Assemble build/cp.app
 
 .PHONY: run
 run: app ## Build and launch cp.app
-	@pkill -x cp || true
+	@# Only ever this bundle's own process: `pkill -x cp` would also kill
+	@# whatever /bin/cp happens to be copying a file at the time.
+	@pkill -f "build/cp.app/Contents/MacOS/cp" || true
 	open build/cp.app
 
 .PHONY: clean

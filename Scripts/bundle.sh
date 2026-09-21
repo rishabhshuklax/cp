@@ -28,10 +28,21 @@ mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BINARY}" "${APP}/Contents/MacOS/cp"
 cp "${ROOT}/Resources/Info.plist" "${APP}/Contents/Info.plist"
 
-# Ad-hoc signature. Enough for TCC to keep the Accessibility grant between
-# launches on the machine that built it; a real distribution needs a Developer ID
-# signature and notarisation.
-echo "==> codesign (ad-hoc)"
-codesign --force --deep --sign - "${APP}"
+# Ad-hoc signature, with the designated requirement pinned to the bundle id.
+#
+# This is the difference between granting Accessibility once and granting it
+# after every build. TCC remembers the app by its designated requirement, and
+# the default ad-hoc requirement is a cdhash — which changes with every byte of
+# the binary, so the next build is a different app as far as the system is
+# concerned and the grant silently stops applying. Naming the identifier
+# instead keeps one identity across rebuilds.
+#
+# Not --deep: it re-signs nested code that a single-binary bundle does not have,
+# and Apple has deprecated it.
+echo "==> codesign (ad-hoc, designated requirement pinned to dev.cp.clipboard)"
+codesign --force --sign - \
+  --requirements '=designated => identifier "dev.cp.clipboard"' \
+  "${APP}"
 
+codesign -d -r- "${APP}" 2>&1 | sed -n 's/^designated/    designated/p'
 echo "==> built ${APP}"

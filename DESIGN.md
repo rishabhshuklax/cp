@@ -1,183 +1,179 @@
 # Design
 
-Why this exists and what it argues for. The short version: **Maccy shows you
-strings; `cp` shows you objects.**
+Why this exists, and what the redesign changed. The short version: **Maccy shows
+you strings; the first cp showed you rows about clippings; this one shows you
+the clipping.**
 
-## The diagnosis
+## The diagnosis, twice
 
-Maccy is a good engine wearing a 2013 UI, and its visual problems are all
-downstream of one structural choice: a clipping is a `String` forever. Once that
-is true, every row must render identically — same grey system font, same single
-truncated line — whether it holds a hex colour, a pull-request link, a 400-line
-Swift file, or a screenshot. Four consequences follow directly:
+The first diagnosis still holds. A clipboard manager that stores `String`
+forever has to render every row identically — same grey font, same truncated
+line — whether it holds a hex colour, a pull-request link, a 400-line Swift file
+or a screenshot. Fix the data model and most of the UI falls out for free.
 
-1. **Two code snippets are visually identical.** Truncated to one line, an
-   indented block renders as leading whitespace and nothing else.
-2. **The strongest retrieval cue is hidden.** You remember *which app* you copied
-   from long before you remember the text. Maccy knows the source app — it's in
-   the hover preview — but the row doesn't show it.
-3. **Time has no structure.** A flat reverse-chronological list gives "that thing
-   from the call an hour ago" nothing to grab.
-4. **The preview fights the keyboard.** It appears on hover, after a delay, so the
-   keyboard-first path — the one 95% of uses take — never sees the content it is
-   choosing between.
+The second diagnosis is about what was built on top of that model. The first cp
+typed its clippings correctly and then spent the row on *metadata about* the
+clipping: an accent bar, a kind label, a word count, a byte count, an ⌥ badge, a
+source app, three lines of body. Nine rows filled the panel, none of them
+scannable, and the actual content sat in a preview pane on the right at half
+width. It was a list of labels with a preview attached.
 
-Fix the data model and most of the UI design falls out for free.
+So: **preview first**. The selected clipping fills the top 192pt of the panel,
+drawn as itself, and the list under it is one line per clipping — a thumbnail,
+what it says, when. You choose by looking at the thing.
 
 ## The spine: typed clippings
 
-`Classifier` runs once at capture and assigns a `ClippingKind`. Everything
-downstream reads off it — row layout, accent colour, preview renderer, which
-transforms are offered, how the item ranks against the app you're pasting into.
+`Classifier` runs once at capture and assigns a `ClippingKind`. Everything reads
+off it — how the hero draws, what the row's thumbnail is, which paste formats
+exist, what the chip offers afterwards.
 
-| Kind | Row renders as |
+| Kind | The hero shows |
 | --- | --- |
-| `url` | favicon + resolved page title + host |
-| `color` | the actual swatch + notation |
-| `image` | thumbnail, dimensions, size |
-| `file` | `NSWorkspace` icon, filename bold, parent dimmed |
-| `code` | monospace first 3 lines + language badge |
-| `json` | pretty head + key/item count |
-| `richText` | the attributed string, scaled down |
-| `text` | first 2 lines + word count |
+| `url` | favicon, host, page title, and the URL with its tracking tinted orange |
+| `color` | a 128pt swatch and the four notations, each of which pastes |
+| `image` | the picture, its size, the text found inside it, and a yellow box on the words you searched for |
+| `file` | Finder's icon, the name, the path, the type and the size |
+| `code` | the language, and the first lines unwrapped, fading at the right edge |
+| `json` | pretty-printed and capped |
+| `richText` | the attributed text, redrawn at the hero's size |
+| `text` | four lines, with what you typed marked |
+| concealed | a countdown ring, `••••••••••••`, "Forgets in 42s · not saved" |
 
-Classification is heuristic and cheap on purpose: it runs on every copy, so it
-stays well under a millisecond. Everything expensive — link titles, full syntax
-highlighting — is deferred to selection time. A wrong guess costs a mislabelled
-badge, not correctness, and that budget buys a much simpler implementation than a
-real tokenizer.
+Classification is heuristic and cheap on purpose: a wrong guess costs a
+mislabelled badge, not correctness.
 
-## Row anatomy
+## The selection model
 
-```
-┌──────────────────────────────────────────────────┐
-│ ▍ ⌘ Xcode                          2m        ⌥1  │
-│ ▍ struct PullRequestView: View {                  │
-│ ▍   @State private var isExpanded = false         │
-│ ▍ swift · 47 lines · 1.2 KB                       │
-└──────────────────────────────────────────────────┘
-```
+This is the part that made the old picker feel broken, and it is worth naming
+precisely. The audit clicked row 4 and pasted row 12.
 
-- **Leading accent bar**, coloured by kind. Hues are spaced far enough apart to
-  separate in peripheral vision — you find "the code one" without reading a word.
-- **Source app icon in the header**, not in a tooltip. 15pt of width for the
-  highest-signal cue available.
-- **56pt rows.** Eight readable rows beat twenty you have to squint at.
-- **Three body lines for code**, two for prose, one for atoms like colours.
+- Opening selects the **newest** clip — what `⌘V` would paste anyway — and never
+  a pin for being a pin.
+- Every change of query, filter or scope selects the top result.
+- `↑` `↓` move; the list scrolls **only** when the selection has left the
+  viewport, and then by the smallest amount that brings it back. It never
+  re-centres.
+- The pointer selects a row only after it has actually moved. A row sliding
+  under a still hand is the list moving, not a choice.
+- Hover never scrolls. A single click pastes, the way a menu item does.
 
-## Two surfaces, not one
+## Three surfaces, not one
 
 One surface trying to be both a 200 ms keyboard flow and a place to browse a
-month of history serves neither. That conflict is what traps the popover model
-into a hover-delayed sub-popover and a scroll view you can't resize.
+month of history serves neither.
 
-- **Picker** (`⇧⌘V`) — centred on screen, 720×460, list left / live preview
-  right, dies on Escape. 95% of usage.
-- **Browser** (menu bar → Browse history) — a real resizable window with a
-  sidebar, multi-select, and bulk actions.
+- **Picker** (`⇧⌘V`) — 720pt wide, hero on top, one-line rows under it. 95% of use.
+- **Quick switch** (hold `⇧⌘`, tap `V`) — eight cards, stepped through with the
+  key you are already holding, pasted by letting go. For "the thing before this
+  one", which is most of what a clipboard manager is for.
+- **Library** (`⌥⌘V`) — an ordinary window with a sidebar, tiles, an inspector
+  and multi-select. For hunting rather than pasting.
 
-Centring the picker rather than anchoring it to the menu bar is the load-bearing
-choice: decoupling from the menu-bar item removes the pressure to stay narrow,
-and the width is exactly what buys the preview pane.
+The picker and the Library keep separate models on purpose. Sharing one is how
+the old build ended up with a browser showing whatever the picker last searched
+for.
 
-## Preview tracks selection, not the mouse
+## The stack, and the chip
 
-Arrow down, preview updates instantly. No hover delay, no popover, no second
-mechanism. Hovering a row also moves the selection, so mouse and keyboard drive
-the same single piece of state.
+Two ideas that only work because the app already knows what a clipping *is*.
 
-## Four smaller bets
+**The stack** (`⇧↩`) collects clips and pastes them in order — as one paste when
+they are all text, because three pastes is three undo steps in the target app.
+Close the picker with clips still in it and cp takes over `⌘V` itself: each
+press pastes the next one. It lets go of the key around its own synthesised
+`⌘V`, and gives it back for good when the stack runs out.
 
-1. **Time sections** — Now / Earlier today / Yesterday / This week / Older.
-   Suppressed while searching, because relevance order is the point then and
-   buckets would hide the best match under a header.
-2. **An invisible query language** — `app:xcode`, `type:link`, `today`, `>1kb`
-   commit to chips as you type the trailing space. Unrecognised `foo:bar` is just
-   search text, so there is nothing to learn and no syntax-error state.
-3. **Type-aware transforms** — a URL offers "remove tracking", JSON offers
-   minify/prettify, code offers "strip indentation". Typing is what keeps the
-   action menu short enough to be worth opening.
-4. **Paste-target awareness** — the frontmost app at invoke time nudges ranking:
-   code up in Xcode, colours and images in Figma. A soft re-rank, never a filter,
-   so being wrong is cheap.
+**The chip** appears under the caret after a paste, offering the other formats
+that clipping could have taken. Clicking one presses `⌘Z`, writes the new
+format, and presses `⌘V` again, so the decision can be made *after* seeing the
+result. When Accessibility will not say where the caret is — Chrome and Electron
+answer with an empty rectangle — it falls back to the foot of the target window,
+then to the pointer.
 
 ## Privacy, made visible
 
-Every clipboard manager persists whatever you copy, passwords included. 1Password
-clears the system clipboard after ~90s, but the manager already snapshotted it, so
-the secret outlives the clear.
+Every clipboard manager persists whatever you copy, passwords included. Three
+layers, and the third is the design statement:
 
-Three layers, and the third is the design statement:
-
-1. **App exclusion** — copies from known password managers are dropped before
-   they reach the history, seeded on first launch so the safe default doesn't
-   depend on anyone opening Settings.
-2. **`org.nspasteboard.ConcealedType`** — the community convention for marking an
-   item private. Honoured, alongside the transient and auto-generated markers.
-3. **Locked rows** — a concealed clipping appears in the list as a blurred, locked
-   row reading *"Concealed · never saved to disk"*, rather than silently
-   vanishing. The behaviour is something you can check at a glance instead of a
-   promise buried in a preferences pane.
-
-Concealed clippings are held for the session only and never written to the
-archive. Credential-shaped payloads (`ghp_`, `sk-`, `AKIA`, JWTs, PEM blocks) are
-concealed by prefix match — deliberately not by entropy, since flagging every
-base64 blob would conceal half a developer's real history.
-
-## Three forks, and how they were called
-
-These were open questions; each was resolved to the first option, and each is a
-seam that can be reversed.
-
-**1. Picker shape — wide and centred, or narrow and menu-bar-anchored?**
-Wide and centred. The preview pane is worth more than the lightness, and the
-lightness is recoverable through speed (no fade-in, ≤200 ms everywhere) rather
-than through width. Reversing means changing `Theme.Metric.panelWidth` and
-`PickerPanel.positionOnActiveScreen()`.
-
-**2. Link titles — resolve them, or show favicon plus domain only?**
-Resolve, but opt-in and lazy. Reading a page title means an outbound request for
-something you merely copied, so it's off by default, fires only for the link you
-have *selected*, and fetches the favicon from the site itself rather than a
-third-party favicon proxy that would otherwise receive your browsing history.
-
-**3. Images — list rows with thumbnails, or a grid?**
-Both, switching automatically. When ≥70% of the filtered set is images the list
-becomes a thumbnail grid, because a list row gives an image 40pt and wastes the
-one property images have that text doesn't — you can recognise one without
-reading it.
+1. Copies from known password managers are dropped before they reach history.
+2. `org.nspasteboard.ConcealedType` is honoured; transient and auto-generated
+   items are not recorded at all.
+3. A concealed clipping appears as a **countdown ring**, not as an absence. The
+   rule is something you can watch working, rather than a promise in a settings
+   pane.
 
 ## Visual language
 
-- **Glass on the container and the search field, never behind the list.**
-  `.ultraThinMaterial` under dense text puts a moving desktop behind what you're
-  reading. The panel gets the material; rows sit on an opaque surface. This is the
-  trap most "modernise it with glass" redesigns fall into.
-- Selection is a tinted rounded rect plus a 1pt accent border — not a full-bleed
-  blue bar.
-- SF Symbols throughout, `.hierarchical` rendering.
-- **Everything ≤200 ms.** This is hit dozens of times a day; nothing is allowed to
-  feel like it's playing an animation at you. The panel has
-  `animationBehavior = .none` for the same reason.
+- **Glass on the chrome, never behind a row.** The search capsule, the results
+  panel, the HUD, the chip and the toast are glass; content sits on a light wash
+  over it. A material behind dense text puts a moving desktop under what you are
+  reading, which is the trap most "modernise it with glass" redesigns fall into.
+  One helper (`cpGlass`) is `glassEffect` on macOS 26 and a material with a
+  hairline edge before it.
+- **One shape per surface.** Capsules for controls, 12pt rounded rects for rows,
+  28pt for the panel. A control in a different shape reads as a mistake before
+  anyone reads its label.
+- Selection is an accent-tinted rounded rect with a 1pt accent edge.
+- System fonts; SF Mono for code, JSON, colours, URLs and paths.
+- Everything under 200 ms. The panel has `animationBehavior = .none`; this is hit
+  dozens of times a day and nothing is allowed to play an animation at you.
+
+## What the redesign removed, and why
+
+Each of these was in the first build and is gone on purpose. They are listed so
+they do not come back.
+
+- **Accent bars and kind labels on rows.** The thumbnail already says what kind
+  it is, and the hero says it louder.
+- **Word counts and byte counts on rows.** Nobody has ever chosen a clipping by
+  its word count.
+- **⌥ badges on every row.** The numbers appear when you hold ⌘, on the rows they
+  apply to, and are invisible the rest of the time.
+- **The keyboard-hint footer.** A permanent strip teaching five shortcuts to
+  someone who learned them on day two.
+- **The invisible query language** (`app:xcode`, `type:link`, `>1kb`). Replaced
+  by suggestions: cp offers the filter as a chip on `⇥` and never applies one
+  silently, so there is no syntax to get wrong.
+- **The affinity ranker** that nudged results by the app you were pasting into.
+  It made the order unpredictable to justify a guess; empty-query order is now
+  strict recency, and a search is ranked by where the words matched.
+- **The adaptive image grid.** The picker is a list with a hero; a grid of
+  thumbnails is what the Library is for.
+- **The hover-delayed preview pane.** The preview is the hero and tracks the
+  selection, so the keyboard path sees exactly what the mouse does.
+- **Prose in Settings.** Every row was followed by a paragraph explaining it. If
+  a row needs a paragraph, the row is wrong.
 
 ## Engineering notes that shaped the design
 
-**The picker cannot be a SwiftUI `Window`.** A normal window either activates the
-app — stealing focus from whatever you were about to paste into, which breaks the
-paste — or can't take key events at all. The working combination is an `NSPanel`
-with `.nonactivatingPanel` in its style mask **and** `canBecomeKey` overridden to
-`true`. Miss either half and it fails silently, differently: without the style
-mask the app activates, without the override the arrow keys do nothing.
+**The picker cannot be a SwiftUI `Window`.** It either activates the app —
+stealing focus from whatever you were about to paste into — or cannot take key
+events. The combination that works is an `NSPanel` with `.nonactivatingPanel`
+*and* `canBecomeKey` overridden.
 
-**Pasting needs Accessibility permission**, because it's a synthesised `⌘V` via
-`CGEvent`. Without the grant the app degrades to copy-only and says so, rather
-than silently doing nothing.
+**A focused `TextField` swallows keys.** That is why `⌥1` used to type `¡` and
+`⌘⌫` never fired. Every key goes through the panel's `sendEvent` to the picker's
+key map first; what it does not claim reaches the field with focus intact. Keys
+are matched on virtual key code and the four modifier flags, never on
+characters, because characters depend on the layout.
 
-**Capture is a 250 ms poll of `NSPasteboard.changeCount`.** There is no
-pasteboard-changed notification on macOS and there never has been.
+**Borderless, not titled.** A titled panel keeps an invisible 32pt title-bar band
+that eats clicks meant for the search field.
 
-**Storage is an append-only JSONL log, not a database.** At the default 2,000-item
-cap the whole history fits in memory and scans in microseconds; what the log buys
-is that a copy costs one write on a background queue and a crash loses at most the
-last line. `ClippingArchive.load()` / `append(_:)` is the entire contract, and the
-seam to swap for SQLite if history ever needs to outgrow memory.
+**Pasting is a synthesised `⌘V`** and needs Accessibility. Without it cp degrades
+to copy-only and says so. It never presses the key unless the target app is
+actually frontmost, so a paste can never land in the wrong window.
+
+**Capture is a 250 ms poll of `changeCount`**, because macOS has no
+pasteboard-changed notification. cp's own writes carry a private pasteboard type
+so they are never captured back as new copies.
+
+**Storage is an append-only JSONL log**, not a database: at the default 2,000-clip
+cap the whole history fits in memory and scans in microseconds, a copy costs one
+write on a background queue, and a crash loses at most the last line.
+
+**The designated requirement is load-bearing.** TCC remembers an app by it, and
+the default ad-hoc requirement is a content hash — so without pinning it to the
+bundle identifier, every rebuild is a new app and the Accessibility grant
+silently stops applying.

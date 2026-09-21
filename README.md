@@ -1,30 +1,22 @@
 # cp
 
-A macOS clipboard manager built on one idea: **a clipping is a typed value, not a
-string.**
+A macOS clipboard manager built on one idea: **a clipping is a typed value, not
+a string** — and a second one the redesign added: **you choose by looking at the
+thing, not by reading a grey line about it.**
 
-Every other clipboard manager stores `String` and renders one truncated grey line
-per item, so a hex colour, a pull-request link, a 400-line Swift file and a
-screenshot all look identical. `cp` classifies at capture and renders per type —
-which is what makes the list scannable instead of readable.
-
-[`DESIGN.md`](DESIGN.md) has the full rationale, the rejected alternatives, and
-the three open questions and how they were called.
+[`DESIGN.md`](DESIGN.md) has the rationale, what was thrown away, and why.
 
 ## Status
 
-**First cut, now compiling.** It was written on Linux without a Swift toolchain,
-then built on macOS 26.6 with Swift 6.3 (Xcode 26.6): two compile errors fixed,
-no warnings, and the 44 tests pass.
+**Redesigned, built, not yet lived with.** The engine (capture, storage, search,
+paste formats, pasting) and the UI (picker, quick switch, format chip, Library,
+menu bar, Settings) are complete rather than stubbed. 162 tests pass; the
+surfaces were checked off-screen against real windows.
 
-Complete in scope: capture, classification, storage, search, ranking,
-transforms, both UI surfaces, and the privacy layer are all implemented rather
-than stubbed. Tests cover the pure logic (classifier, query parser, fuzzy matcher,
-transforms, privacy heuristics).
+Requires macOS 14 or later; the Liquid Glass chrome is macOS 26 and falls back
+to a material with a hairline edge before that.
 
 ## Build
-
-Requires macOS 14+ and a Swift 5.9+ toolchain.
 
 ```bash
 make app     # build and assemble build/cp.app
@@ -32,82 +24,110 @@ make run     # build, assemble, and launch
 make test    # run the test suite
 ```
 
-`make app` wraps `swift build` and assembles a real `.app` bundle. The bundle
-matters: `LSUIElement` only applies inside one, and TCC needs a stable bundle
-identity to remember the Accessibility grant between launches. Running the bare
-binary works but re-prompts every time.
+The bundle matters: `LSUIElement` only applies inside one, and the Accessibility
+grant is remembered per app. `bundle.sh` signs ad-hoc with the designated
+requirement pinned to the bundle identifier, so the grant survives a rebuild —
+the default ad-hoc requirement is a content hash and changes every time.
 
 ## Using it
 
-`⇧⌘V` opens the picker, centred on screen.
+`⇧⌘V` opens the picker, centred above the middle of the screen. The clipping you
+are about to paste fills the top of it, rendered as itself. Hold `⇧⌘` and tap
+`V` again to get the switcher instead: a row of recent clips, released to paste.
 
 | Key | Does |
 | --- | --- |
-| `↑` `↓` | Move selection — the preview follows instantly |
+| `↑` `↓` | Move the selection; the preview follows |
 | `↩` | Paste |
-| `⌘↩` | Paste as plain text |
-| `⌥1`–`⌥9` | Jump straight to a row |
-| `⌘P` | Pin (pinned items are never trimmed) |
-| `⌘⌫` | Delete |
-| `esc` | Close |
+| `⌥↩` | Paste as plain text |
+| `⇧↩` | Add to, or take out of, the stack |
+| `⌘↩` | Paste the stack in order |
+| `⌘1`–`⌘9` | Paste that row (hold ⌘ to see the numbers) |
+| `Space` or `⌘Y` | Look: the clipping fills the panel |
+| `⌘K` | Paste as… |
+| `⌘P` | Pin (pinned clips are never trimmed) |
+| `⌘⌫` | Delete; `⌘Z` puts it back |
+| `⇥` | Take the offered filter, or switch Recent / Pinned |
+| `⌫` | Remove the last filter |
+| `esc` | Close the actions, leave Look, clear the search, close |
+| `⌘,` | Settings |
+| `⌥⌘V` | Library |
 
-Search accepts filters that commit to chips as you type: `app:xcode`,
-`type:link`, `type:code`, `today`, `pinned`, `>1kb`. Anything unrecognised is
-just search text, so there is no syntax to learn.
+Search matches what you typed, literally, in the title, the page title, the
+body, the text found inside images, the URL, the file path and the app name.
+Words that could be filters — `links`, `yesterday`, `figma` — are *offered* as a
+chip on `⇥`, never applied behind your back.
+
+**The stack.** `⇧↩` adds clips to it. Paste them in order with `⌘↩`, or close the
+picker and each `⌘V` pastes the next one until it runs out.
+
+**After a paste**, a small capsule appears where the text landed with the other
+formats that clipping could have taken — Markdown, the clean link, the text
+inside the screenshot. Clicking one swaps the paste in place.
 
 ## Permissions
 
-- **Accessibility** — needed only to press `⌘V` for you. Without it, choosing an
-  item still copies it; you press `⌘V` yourself. The app says so rather than
-  failing silently.
-- **No network access by default.** Link-title lookup is opt-in, fires only for
-  the link you have selected, and talks only to the site itself.
+- **Accessibility** — only to press `⌘V` for you. Without it, choosing still
+  copies, the button says **Copy**, and the toast tells you to press `⌘V`.
+- **Reading the clipboard** — macOS 15.4 and later asks once; Settings shows
+  where it stands.
+- **No network by default.** Page titles are opt-in, fetched only for the link
+  you have selected, and only from the site itself.
 
 ## Where things are
 
 ```
 Sources/CpKit/
-  Model/      Clipping, ClippingKind, Classifier, CodeHeuristic, TimeBucket
-  Capture/    PasteboardMonitor (250ms changeCount poll), PrivacyFilter
+  Model/      Clipping, ClippingKind, Classifier, CodeHeuristic
+  Capture/    PasteboardMonitor (250 ms changeCount poll), PrivacyFilter, ImageFacts
   Store/      ClippingStore (in-memory index), ClippingArchive (JSONL), Settings
-  Search/     SearchQuery (the invisible query language), FuzzyMatch, Ranker
-  Paste/      Paster (CGEvent ⌘V), Transform (type-aware actions)
-  Services/   LinkResolver (lazy, opt-in, first-party only)
-  UI/         PickerPanel, PickerView, ClippingRow, PreviewPane, SearchBar,
-              ImageGrid, BrowserView, SettingsView, Theme
-  App/        AppController, GlobalHotKey (Carbon)
-Sources/cp/   CpApp — scenes and app delegate, nothing else
+  Search/     ClipSearch (literal, folded, cached), FoldedText
+  Paste/      Paster (CGEvent ⌘V), PasteFormat, JSONFormatter, ColorFormats, URLTracking
+  Services/   LinkResolver + LinkPreviews, TextRecognizer (Vision)
+  UI/
+    Picker/     PickerModel, PickerKeys, ListLayout, HeroView, ClipRow, ActionsView, PickerWindow
+    Switcher/   QuickSwitch (state machine), ClipCard, SwitcherView
+    Chip/       FormatChip (placement, caret lookup)
+    Library/    LibraryModel, LibraryView, LibraryWindow
+    MenuBar/    MenuBarView
+    Settings/   SettingsView, ShortcutRecorder
+    Toast/      ToastCenter
+    Shared/     MarkedText, CodeHighlighter, RichPreview, Icons, RelativeTime
+    Theme, Glass, KeyPanel
+  App/        AppController, GlobalHotKey (Carbon), PasteStack
+Sources/cp/   CpApp — the MenuBarExtra scene and the app delegate
 ```
 
-Three load-bearing details, spelled out where they live so they aren't
+Four load-bearing details, spelled out where they live so they are not
 rediscovered the hard way:
 
-- **`PickerPanel`** — `.nonactivatingPanel` **and** `canBecomeKey` overridden.
-  Either one alone fails silently, and differently.
+- **`KeyPanel`** — `.nonactivatingPanel` **and** `canBecomeKey` overridden, or it
+  fails silently and differently. `sendEvent` routes every key to the model
+  before the search field can swallow it.
 - **`PasteboardMonitor`** — polling is the only option; macOS has no
-  pasteboard-changed notification.
+  pasteboard-changed notification and never has.
 - **`GlobalHotKey`** — Carbon's `RegisterEventHotKey` is still the right call.
-  `NSEvent` global monitors can observe a keystroke but not consume it, and a
-  `CGEventTap` would demand Accessibility permission before first launch.
+  `NSEvent` monitors can see a keystroke but not consume it, and a `CGEventTap`
+  would demand Accessibility before first launch.
+- **`Scripts/bundle.sh`** — the designated requirement is why the Accessibility
+  grant survives rebuilds.
 
 ## Privacy
 
-Clipboard managers persist whatever you copy, passwords included — your password
-manager clears the system clipboard after ~90s, but the manager already
-snapshotted it. Three layers, and the third is the point:
+Clipboard managers persist whatever you copy, passwords included. Three layers,
+and the third is the point:
 
-1. Copies from known password managers are dropped before they reach the history.
-2. The `org.nspasteboard.ConcealedType` convention is honoured.
-3. A concealed clipping shows up as a **locked row** — "Concealed · never saved to
-   disk" — rather than silently vanishing, so the rule is something you can see
-   working instead of a promise in a settings pane.
+1. Copies from known password managers never reach the history.
+2. The `org.nspasteboard.ConcealedType` convention is honoured; transient and
+   auto-generated items are ignored entirely.
+3. A concealed clipping shows up as a **countdown** — "Forgets in 42s · not
+   saved" — so the rule is something you can watch working.
 
-Concealed items are held for the session only and never written to the archive.
+Concealed clippings live in memory for as long as Settings says, and are never
+written to disk.
 
 ## Not done yet
 
-- Real syntax highlighting. Code rows are monospace with a detected language
-  badge; the tokens aren't coloured.
 - iCloud or any other sync.
-- A configurable hotkey — `⇧⌘V` is currently hard-coded.
-- Multi-select and bulk export in the browser window.
+- Sharing the history between machines, or exporting it.
+- Editing a clipping before pasting it.
