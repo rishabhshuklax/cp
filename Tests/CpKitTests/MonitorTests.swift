@@ -156,6 +156,25 @@ final class MonitorTests: XCTestCase {
         XCTAssertEqual(onDisk, Set(store.clippings.compactMap(\.assetFilename)), "no orphaned PNGs")
     }
 
+    /// Fix 18: converting and hashing a big TIFF used to happen inside the
+    /// poll, on the main thread. Now the poll only reads bytes and returns; the
+    /// capture arrives afterwards.
+    func testImageWorkHappensAfterThePollReturns() throws {
+        monitor.stop()
+        let rep = screenshot(width: 3_000, height: 2_000, pointScale: 2, color: .systemTeal)
+        let tiff = try XCTUnwrap(rep.tiffRepresentation)
+        pasteboard.clearContents()
+        pasteboard.setData(tiff, forType: .tiff)
+
+        monitor.poll()
+        XCTAssertEqual(captures, 0, "the poll returned before the image was converted")
+        XCTAssertTrue(store.clippings.isEmpty)
+
+        XCTAssertTrue(waitUntil(timeout: 10) { self.captures == 1 })
+        XCTAssertEqual(store.clippings.first?.pixelWidth, 3_000)
+        XCTAssertEqual(store.clippings.first?.pixelHeight, 2_000)
+    }
+
     func testTIFFBecomesPNG() throws {
         let tiff = try XCTUnwrap(screenshot(width: 64, height: 32, pointScale: 1, color: .systemGreen).tiffRepresentation)
         XCTAssertTrue(copy { $0.setData(tiff, forType: .tiff) })
