@@ -76,7 +76,7 @@ public final class Paster {
         // synthetic event — a still-held ⇧ from the hotkey would turn this into
         // ⌘⇧V, which means something else entirely in most editors.
         source.setLocalEventsFilterDuringSuppressionState(
-            [.permitLocalMouseEvents, .permitLocalPointingDeviceEvents],
+            [.permitLocalMouseEvents, .permitSystemDefinedEvents],
             state: .eventSuppressionStateSuppressionInterval
         )
 

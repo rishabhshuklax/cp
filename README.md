@@ -13,15 +13,14 @@ the three open questions and how they were called.
 
 ## Status
 
-**First cut, not yet compiled.** It was written on Linux, where there is no Swift
-toolchain and no AppKit, so it has never been through a build. Expect a round of
-compiler errors on the first `swift build` — the logic and the design are the
-work here; the type-checker hasn't had its say yet.
+**First cut, now compiling.** It was written on Linux without a Swift toolchain,
+then built on macOS 26.6 with Swift 6.3 (Xcode 26.6): two compile errors fixed,
+no warnings, and the 44 tests pass.
 
-Unbuilt but complete in scope: capture, classification, storage, search, ranking,
+Complete in scope: capture, classification, storage, search, ranking,
 transforms, both UI surfaces, and the privacy layer are all implemented rather
 than stubbed. Tests cover the pure logic (classifier, query parser, fuzzy matcher,
-transforms, privacy heuristics) and need macOS to run.
+transforms, privacy heuristics).
 
 ## Build
 

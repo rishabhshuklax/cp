@@ -161,7 +161,7 @@ public final class AppController {
         // synthetic ⌘V, or the keystroke lands in a window that is going away.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             MainActor.assumeIsolated {
-                self?.paster.synthesizePaste()
+                _ = self?.paster.synthesizePaste()
             }
         }
     }

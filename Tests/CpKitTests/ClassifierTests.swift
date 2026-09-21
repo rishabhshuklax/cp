@@ -8,8 +8,10 @@ final class ClassifierTests: XCTestCase {
         XCTAssertEqual(Classifier.classify("#abc").kind, .color)
         XCTAssertEqual(Classifier.classify("#AABBCCDD").kind, .color)
         XCTAssertEqual(Classifier.classify("#FF5733").detail, "#FF5733")
+        // #RGBA is CSS Color 4 shorthand, and `ColorParser` expands it.
+        XCTAssertEqual(Classifier.classify("#F57A").kind, .color)
         // Wrong digit count is not a colour.
-        XCTAssertNotEqual(Classifier.classify("#FF57").kind, .color)
+        XCTAssertNotEqual(Classifier.classify("#FF573").kind, .color)
         XCTAssertNotEqual(Classifier.classify("#hello!").kind, .color)
     }
 
