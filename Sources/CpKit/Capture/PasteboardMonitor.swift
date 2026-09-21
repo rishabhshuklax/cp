@@ -20,7 +20,7 @@ public final class PasteboardMonitor {
 
     /// A capture, and for a concealed one its text, which must never go in the
     /// payload.
-    public var onCapture: ((Clipping, _ secret: String?) -> Void)?
+    @ObservationIgnored public var onCapture: ((Clipping, _ secret: String?) -> Void)?
 
     /// When capturing resumes; `.distantFuture` until `resume()`. `nil` while
     /// capturing.
