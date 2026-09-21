@@ -48,3 +48,36 @@ public enum MarkedText {
         return result
     }
 }
+
+extension MarkedText {
+
+    /// Where each word appears in a piece of text, case- and diacritic-blind.
+    ///
+    /// The search index hands back ranges for a title or a snippet; the hero
+    /// shows a preview of the payload, which those ranges do not point into.
+    /// This finds them again over the few kilobytes actually on screen.
+    public static func ranges(of words: [String], in text: String, limit: Int = 60) -> [NSRange] {
+        guard !words.isEmpty, !text.isEmpty else { return [] }
+        var spans: [Range<String.Index>] = []
+        for word in words where !word.isEmpty {
+            var from = text.startIndex
+            while from < text.endIndex, spans.count < limit,
+                  let found = text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive],
+                                         range: from..<text.endIndex) {
+                spans.append(found)
+                from = found.upperBound
+            }
+        }
+        guard !spans.isEmpty else { return [] }
+        spans.sort { $0.lowerBound < $1.lowerBound }
+        var merged: [Range<String.Index>] = [spans[0]]
+        for span in spans.dropFirst() {
+            if let last = merged.last, span.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, span.upperBound)
+            } else {
+                merged.append(span)
+            }
+        }
+        return merged.map { NSRange($0, in: text) }
+    }
+}

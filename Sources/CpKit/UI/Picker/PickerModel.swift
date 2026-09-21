@@ -105,6 +105,8 @@ public final class PickerModel {
     public private(set) var scope: ClipScope = .recent
     public private(set) var hits: [ClipHit] = []
     public private(set) var items: [PickerItem] = []
+    /// Row numbers, for the ⌘1…⌘9 keycaps, without a scan per row.
+    @ObservationIgnored private var rowNumbers: [UUID: Int] = [:]
     public private(set) var selectedID: UUID?
     public private(set) var suggestion: ClipFilter?
     public private(set) var scrollTarget: ScrollTarget?
@@ -156,6 +158,7 @@ public final class PickerModel {
         tokens = []
         scope = .recent
         isLookOpen = false
+        isCommandHeld = false
         closeActions()
         lastPointer = pointer
         now = Date()
@@ -232,6 +235,7 @@ public final class PickerModel {
     private func rebuildItems() {
         var items: [PickerItem] = []
         var heights: [CGFloat] = []
+        rowNumbers = [:]
         let sectioned = storedQuery.isEmpty && scope == .recent
         var currentDay: RelativeTime.Day?
         for hit in hits {
@@ -243,6 +247,7 @@ public final class PickerModel {
                     heights.append(Theme.Metric.sectionHeight)
                 }
             }
+            rowNumbers[hit.id] = rowNumbers.count
             items.append(.hit(hit))
             heights.append(Theme.Metric.rowHeight)
         }
@@ -266,6 +271,14 @@ public final class PickerModel {
                 self.observeStore()
             }
         }
+    }
+
+    public func index(of id: UUID) -> Int? { rowNumbers[id] }
+
+    /// The words typed, for highlighting a preview the search index has no
+    /// ranges for.
+    public var queryWords: [String] {
+        storedQuery.split(whereSeparator: { $0.isWhitespace }).map { $0.lowercased() }
     }
 
     // MARK: - Selection
@@ -400,6 +413,27 @@ public final class PickerModel {
             host?.openSettings()
         }
         return true
+    }
+
+    /// Pastes a clipping in whatever format it is meant to have — what a click
+    /// on its row, or ↩ on it, does.
+    public func paste(_ clipping: Clipping) {
+        host?.paste(clipping, as: PasteFormats.defaultFormat(for: clipping, settings: settings))
+    }
+
+    public func paste(_ clipping: Clipping, as format: PasteFormat) {
+        host?.paste(clipping, as: format)
+    }
+
+    public func setActionIndex(_ index: Int) {
+        guard actions.indices.contains(index), actionIndex != index else { return }
+        actionIndex = index
+    }
+
+    /// True only when pasting is on but not permitted — "Copy only" is a
+    /// choice, not a problem to offer a fix for.
+    public var needsPastePermission: Bool {
+        settings.pasteAutomatically && !(host?.canPaste ?? true)
     }
 
     public func pasteSelected() {

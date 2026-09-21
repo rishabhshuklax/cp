@@ -2,20 +2,34 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Owns the running app: the engine pieces, and (as the redesign lands) the
-/// surfaces built on them.
+/// Owns the running app: the engine, the surfaces, the hot keys, and the one
+/// question every one of them ends up asking — which app is this going into?
 @Observable
 @MainActor
-public final class AppController {
+public final class AppController: PickerHost {
 
     public let settings: Settings
     public let store: ClippingStore
     public let archive: ClippingArchive?
     public let links: LinkPreviews
+    public let toasts = ToastCenter()
+    public let stack: PasteStack
+    public let pickerModel: PickerModel
 
     let monitor: PasteboardMonitor
     let paster: PasteWriting
+
     private let pickerHotKey = GlobalHotKey()
+    private var picker: PickerWindow!
+    private var toastWindow: ToastWindow!
+
+    /// The app the paste is aimed at, captured when the picker opens: by the
+    /// time you choose, the answer can have changed.
+    private var pasteTarget: NSRunningApplication?
+    /// The last app that was frontmost other than cp, for when the Library is
+    /// in front and the frontmost app *is* cp.
+    private var lastOtherApp: NSRunningApplication?
+    private var lastDeleted: DeletedClipping?
 
     public private(set) var lastError: String?
 
@@ -31,11 +45,24 @@ public final class AppController {
         let store = ClippingStore(archive: archive, settings: settings)
         self.store = store
         self.links = LinkPreviews(store: store, settings: settings)
-        self.paster = Paster(pasteboard: pasteboard)
+        let paster = Paster(pasteboard: pasteboard)
+        self.paster = paster
         self.monitor = PasteboardMonitor(pasteboard: pasteboard, settings: settings, archive: archive)
+        self.stack = PasteStack(store: store, settings: settings, paster: paster)
+        self.pickerModel = PickerModel(store: store, settings: settings, links: links, stack: stack)
 
         monitor.onCapture = { [weak self] clipping, secret in
             self?.store.ingest(clipping, secret: secret)
+        }
+        stack.ignoreChange = { [weak self] count in self?.monitor.ignore(changeCount: count) }
+        stack.toast = { [weak self] text in self?.toasts.show(text) }
+        pickerModel.host = self
+
+        picker = PickerWindow(model: pickerModel)
+        toastWindow = ToastWindow(center: toasts)
+        picker.onHide = { [weak self] in
+            // Clips left in the stack take over ⌘V once the picker is gone.
+            self?.stack.armIfNeeded()
         }
     }
 
@@ -45,33 +72,200 @@ public final class AppController {
         NSApp.setActivationPolicy(.accessory)
         monitor.start()
         registerHotKey()
+        watchFrontmostApp()
+        observeToasts()
     }
 
     public func stop() {
         monitor.stop()
         pickerHotKey.unregister()
+        stack.disarm()
     }
 
-    // MARK: - Hot key
+    // MARK: - Hot keys
 
-    func registerHotKey() {
+    public func registerHotKey() {
         let registered = pickerHotKey.register(settings.hotKey) { [weak self] in
             self?.hotKeyPressed()
         }
         lastError = registered ? nil : "Taken by another app"
     }
 
-    private func hotKeyPressed() {}
+    private func hotKeyPressed() {
+        togglePicker()
+    }
 
-    // MARK: - Permissions
+    // MARK: - The picker
+
+    public var isPickerVisible: Bool { picker.isVisible }
+
+    public func showPicker() {
+        pasteTarget = currentTarget()
+        picker.show()
+    }
+
+    public func hidePicker() {
+        picker.hide()
+    }
+
+    public func togglePicker() {
+        picker.isVisible ? hidePicker() : showPicker()
+    }
+
+    // MARK: - Paste target
+
+    private var ownBundleID: String? { Bundle.main.bundleIdentifier }
+
+    private func currentTarget() -> NSRunningApplication? {
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if let frontmost, frontmost.bundleIdentifier == ownBundleID { return lastOtherApp }
+        return frontmost ?? lastOtherApp
+    }
+
+    private func watchFrontmostApp() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            MainActor.assumeIsolated {
+                guard app.bundleIdentifier != self?.ownBundleID else { return }
+                self?.lastOtherApp = app
+            }
+        }
+    }
+
+    private func observeToasts() {
+        withObservationTracking {
+            _ = toasts.current
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.toastWindow.update()
+                self?.observeToasts()
+            }
+        }
+    }
+
+    // MARK: - PickerHost
 
     public var canPaste: Bool { paster.canPaste }
+
+    public func paste(_ clipping: Clipping, as format: PasteFormat) {
+        guard let payload = PasteRenderer.payload(for: clipping, as: format, store: store)
+                ?? PasteRenderer.payload(for: clipping, as: .original, store: store) else {
+            hidePicker()
+            toasts.show(clipping.isConcealed ? "That password is gone" : "Nothing to paste")
+            return
+        }
+        monitor.ignore(changeCount: paster.write(payload))
+        // Hidden before the keystroke: the target has to be frontmost first.
+        hidePicker()
+        paster.paste(into: pasteTarget, automatic: settings.pasteAutomatically) { [weak self] outcome in
+            self?.report(outcome, for: clipping, format: format)
+        }
+    }
+
+    private func report(_ outcome: PasteOutcome, for clipping: Clipping, format: PasteFormat) {
+        switch outcome {
+        case .pasted(let appName):
+            toasts.show("Pasted into \(appName ?? "the app")")
+        case .copiedOnly:
+            toasts.show("Copied · press ⌘V")
+        }
+    }
+
+    public func pasteStackInOrder() {
+        let target = pasteTarget ?? currentTarget()
+        hidePicker()
+        stack.pasteInOrder(into: target)
+    }
+
+    public func closePicker() {
+        hidePicker()
+    }
+
+    public func openSettings() {
+        // Settings is its own window; it lands with the rest of the chrome.
+    }
+
+    public func openLink(_ clipping: Clipping) {
+        guard let url = LinkResolver.normalizedURL(clipping.payload) else { return }
+        hidePicker()
+        NSWorkspace.shared.open(url)
+    }
+
+    public func openSource(_ clipping: Clipping) {
+        guard let source = clipping.sourceURL, let url = LinkResolver.normalizedURL(source) else { return }
+        hidePicker()
+        NSWorkspace.shared.open(url)
+    }
+
+    public func revealInFinder(_ clipping: Clipping) {
+        let urls = PasteFormats.paths(of: clipping).map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else { return }
+        hidePicker()
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    public func saveImageToDesktop(_ clipping: Clipping) {
+        guard let file = clipping.assetFilename, let source = store.assetURL(file),
+              let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first else { return }
+        hidePicker()
+        let stamp = Self.fileStamp.string(from: clipping.lastCopiedAt)
+        var destination = desktop.appendingPathComponent("Clipboard \(stamp).png")
+        var attempt = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            destination = desktop.appendingPathComponent("Clipboard \(stamp) (\(attempt)).png")
+            attempt += 1
+        }
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
+            toasts.show("Saved to Desktop")
+        } catch {
+            toasts.show("Could not save that image")
+        }
+    }
+
+    public func togglePin(_ clipping: Clipping) {
+        store.togglePin(clipping.id)
+        toasts.show(clipping.isPinned ? "Unpinned" : "Pinned")
+    }
+
+    public func delete(_ clipping: Clipping) {
+        if stack.contains(clipping.id) { stack.toggle(clipping.id) }
+        guard let deleted = store.delete(clipping.id) else {
+            // A password: forgotten outright, with nothing to undo.
+            toasts.show("Password forgotten")
+            return
+        }
+        lastDeleted = deleted
+        toasts.show("Deleted") { [weak self] in self?.undoDelete() }
+    }
+
+    public func forget(_ clipping: Clipping) {
+        store.forget(clipping.id)
+        toasts.show("Password forgotten")
+    }
+
+    public func undoDelete() {
+        guard let lastDeleted else { return }
+        store.restore(lastDeleted)
+        self.lastDeleted = nil
+        toasts.show("Restored")
+    }
 
     public func requestPastePermission() {
         paster.requestPermission()
     }
 
+    // MARK: - Permissions
+
     public func clearError() { lastError = nil }
+
+    private static let fileStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return formatter
+    }()
 }
 
 extension AppController {
