@@ -141,3 +141,46 @@ final class LibraryModelTests: XCTestCase {
         XCTAssertEqual(payloads(model.clippings), ["second", "first"])
     }
 }
+
+/// The menu bar's one job when it opens: say whether cp is recording.
+@MainActor
+final class MenuBarStateTests: XCTestCase {
+
+    private func makeController() throws -> (AppController, NSPasteboard) {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.cp.tests.\(UUID().uuidString)"))
+        let settings = Settings(defaults: MemoryDefaults())
+        return (AppController(settings: settings, archive: nil, pasteboard: pasteboard), pasteboard)
+    }
+
+    func testCaptureStateReadsThePause() throws {
+        let (controller, pasteboard) = try makeController()
+        defer { pasteboard.releaseGlobally() }
+
+        XCTAssertFalse(controller.isPaused)
+        XCTAssertEqual(controller.captureState, "Saving what you copy")
+
+        controller.togglePause()
+        XCTAssertTrue(controller.isPaused)
+        XCTAssertTrue(controller.captureState.hasPrefix("Paused · resumes "), controller.captureState)
+
+        controller.togglePause()
+        XCTAssertFalse(controller.isPaused)
+        XCTAssertEqual(controller.captureState, "Saving what you copy")
+    }
+
+    func testRecentRowsLeaveOutPasswords() throws {
+        let (controller, pasteboard) = try makeController()
+        defer { pasteboard.releaseGlobally() }
+
+        for index in 0..<7 {
+            controller.store.ingest(Clipping(kind: .text, payload: "note \(index)",
+                                             createdAt: Date().addingTimeInterval(-Double(index))))
+        }
+        controller.store.ingest(Clipping(kind: .text, payload: "", isConcealed: true), secret: "hunter2-hunter2")
+
+        let recent = controller.recentForMenu()
+        XCTAssertEqual(recent.count, 5)
+        XCTAssertEqual(recent.first?.payload, "note 0")
+        XCTAssertFalse(recent.contains { $0.isConcealed })
+    }
+}

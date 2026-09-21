@@ -277,6 +277,35 @@ public final class AppController: PickerHost, LibraryHost {
         // Settings is its own window; it lands with the rest of the chrome.
     }
 
+    // MARK: - Capture state, for the menu bar
+
+    public var isPaused: Bool {
+        guard let until = monitor.pausedUntil else { return false }
+        return until > Date()
+    }
+
+    /// "Saving what you copy", or when it starts again.
+    public var captureState: String {
+        guard let until = monitor.pausedUntil, until > Date() else { return "Saving what you copy" }
+        guard until != .distantFuture else { return "Paused" }
+        return "Paused · resumes \(RelativeTime.clock(until))"
+    }
+
+    public func togglePause() {
+        if isPaused {
+            monitor.resume()
+            toasts.show("Saving what you copy")
+        } else {
+            monitor.pause(for: 600)
+            toasts.show("Paused for 10 minutes")
+        }
+    }
+
+    /// The five most recent clippings, passwords left out.
+    public func recentForMenu(limit: Int = 5) -> [Clipping] {
+        Array(store.clippings.lazy.filter { !$0.isConcealed }.prefix(limit))
+    }
+
     // MARK: - The Library
 
     public var isLibraryVisible: Bool { library.isVisible }
